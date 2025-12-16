@@ -52,17 +52,89 @@ RESET_TABLE=1 python rag_low_level_m1_16gb_verbose.py
 
 ## Usage
 
-### Basic Usage
-
-The script processes a PDF document, creates embeddings, stores them in PostgreSQL, and answers questions:
+### Quick Start
 
 ```bash
-# First run - index the document and answer question
+# Index and query in one step
 RESET_TABLE=1 python rag_low_level_m1_16gb_verbose.py
 
-# Subsequent runs - query existing index
-python rag_low_level_m1_16gb_verbose.py
+# Query existing index (fast - skips re-indexing)
+python rag_low_level_m1_16gb_verbose.py --query-only
+
+# Interactive mode - ask multiple questions
+python rag_low_level_m1_16gb_verbose.py --interactive
+
+# Custom query via command line
+python rag_low_level_m1_16gb_verbose.py --query "What are the key findings?"
 ```
+
+### CLI Options
+
+The script now supports command-line arguments for flexible operation:
+
+```bash
+python rag_low_level_m1_16gb_verbose.py [OPTIONS]
+
+Options:
+  --query-only, -qo          Skip indexing, only query existing index
+  --interactive, -i          Interactive REPL mode for multiple queries
+  --query QUERY, -q QUERY    Single query (overrides QUESTION env var)
+  --doc DOC, -d DOC          Document path (overrides PDF_PATH env var)
+  --skip-validation          Skip startup validation (use with caution)
+  --help, -h                 Show help message
+```
+
+**Supported File Formats:**
+- PDF (`.pdf`) - Page-by-page indexing
+- Word Documents (`.docx`) - Full document
+- Text files (`.txt`) - Full document
+- Markdown (`.md`) - Full document
+
+**Usage Examples:**
+
+```bash
+# Index a Word document
+python rag_low_level_m1_16gb_verbose.py --doc report.docx
+
+# Query existing index interactively
+python rag_low_level_m1_16gb_verbose.py --query-only --interactive
+
+# Quick query without re-indexing
+python rag_low_level_m1_16gb_verbose.py --query-only -q "Summarize the main points"
+
+# Index markdown file with custom table
+PDF_PATH=notes.md PGTABLE=my_notes RESET_TABLE=1 python rag_low_level_m1_16gb_verbose.py
+```
+
+### Interactive Mode
+
+Interactive mode provides a REPL (Read-Eval-Print Loop) for asking multiple questions without restarting:
+
+```bash
+python rag_low_level_m1_16gb_verbose.py --interactive
+```
+
+```
+======================================================================
+INTERACTIVE MODE
+======================================================================
+Ask questions about your documents. Type 'exit' or 'quit' to end.
+
+Question: What is the main topic?
+[Answer appears here]
+
+Question: Can you elaborate on the methodology?
+[Answer appears here]
+
+Question: exit
+Goodbye!
+```
+
+**Interactive Mode Commands:**
+- Type your question and press Enter
+- `exit`, `quit`, or `q` to end session
+- `Ctrl+C` to interrupt
+- Empty input is ignored
 
 ### Environment Variables
 

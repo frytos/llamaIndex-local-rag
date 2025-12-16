@@ -21,12 +21,20 @@ import sys
 import time
 import platform
 import logging
-from dataclasses import dataclass
+import argparse
+import hashlib
+from dataclasses import dataclass, field
 from typing import Any, List, Optional, Iterable, Tuple
 from pathlib import Path
 
 import psycopg2
 from psycopg2 import OperationalError as PgOperationalError
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None
+    logging.warning("tqdm not installed, progress bars disabled. Install with: pip install tqdm")
 
 from llama_index.readers.file import PyMuPDFReader
 from llama_index.core.node_parser import SentenceSplitter
@@ -105,6 +113,78 @@ def preview(text: str, n: int = 220) -> str:
     """Small helper to keep logs readable."""
     t = (text or "").replace("\n", " ").strip()
     return (t[:n] + "…") if len(t) > n else t
+
+
+def compute_file_hash(file_path: str) -> str:
+    """Compute SHA-256 hash of a file for tracking."""
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Local RAG pipeline with PostgreSQL + pgvector",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Full pipeline (index + query)
+  python %(prog)s
+
+  # Query existing index only (skip re-indexing)
+  python %(prog)s --query-only
+
+  # Interactive mode (ask multiple questions)
+  python %(prog)s --interactive
+
+  # Single query via CLI
+  python %(prog)s --query "What are the main findings?"
+
+  # Use different document
+  PDF_PATH=my_doc.pdf PGTABLE=my_doc python %(prog)s
+
+Environment Variables:
+  See README.md for full list of configuration options
+        """
+    )
+
+    parser.add_argument(
+        "--query-only",
+        action="store_true",
+        help="Skip document ingestion, only run query on existing index"
+    )
+
+    parser.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        help="Interactive REPL mode for multiple queries"
+    )
+
+    parser.add_argument(
+        "--query",
+        "-q",
+        type=str,
+        help="Single query to run (overrides QUESTION env var)"
+    )
+
+    parser.add_argument(
+        "--doc",
+        "-d",
+        type=str,
+        help="Document path (overrides PDF_PATH env var)"
+    )
+
+    parser.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="Skip startup validation (use with caution)"
+    )
+
+    return parser.parse_args()
 
 
 # -----------------------
@@ -258,7 +338,7 @@ class Settings:
 
 
 S = Settings()
-S.validate()  # Validate settings immediately after creation
+# Validation will be called in main() after CLI args are parsed
 
 
 # -----------------------
@@ -546,40 +626,79 @@ def build_llm() -> LlamaCPP:
     return llm
 
 
-def load_pdf(pdf_path: str) -> List[Any]:
+def load_documents(doc_path: str) -> List[Any]:
     """
-    Load PDF pages into LlamaIndex Documents.
-    Usually each page becomes one Document.
+    Load documents from various formats (PDF, DOCX, TXT, MD).
+    Returns LlamaIndex Documents.
     """
-    if not os.path.exists(pdf_path):
+    path = Path(doc_path)
+
+    if not path.exists():
         raise FileNotFoundError(
-            f"PDF file not found: {pdf_path}\n"
-            f"  Fix: Place your PDF at this path or set PDF_PATH environment variable\n"
+            f"Document not found: {doc_path}\n"
+            f"  Fix: Place your document at this path or set PDF_PATH environment variable\n"
             f"  Example: PDF_PATH=/path/to/your/document.pdf python {sys.argv[0]}"
         )
 
-    log.info(f"Loading PDF: {pdf_path}")
-    file_size_mb = os.path.getsize(pdf_path) / (1024 * 1024)
-    log.info(f"  File size: {file_size_mb:.1f} MB")
+    ext = path.suffix.lower()
+    file_size_mb = path.stat().st_size / (1024 * 1024)
+
+    log.info(f"Loading document: {doc_path}")
+    log.info(f"  Format: {ext}, Size: {file_size_mb:.1f} MB")
 
     t = now_ms()
+    docs = []
+
     try:
-        docs = PyMuPDFReader().load(file_path=pdf_path)
+        if ext == ".pdf":
+            # PDF: Use PyMuPDFReader (page-per-document)
+            docs = PyMuPDFReader().load(file_path=str(path))
+
+        elif ext == ".docx":
+            # DOCX: Load as single document
+            try:
+                from docx import Document as DocxDocument
+            except ImportError:
+                raise ImportError(
+                    "python-docx not installed. Install with: pip install python-docx"
+                )
+
+            docx_doc = DocxDocument(str(path))
+            text = "\n".join([p.text for p in docx_doc.paragraphs])
+
+            from llama_index.core.schema import Document
+            docs = [Document(text=text, metadata={"source": str(path), "format": "docx"})]
+
+        elif ext in (".txt", ".md"):
+            # TXT/MD: Load as single document
+            text = path.read_text(encoding="utf-8", errors="replace")
+
+            from llama_index.core.schema import Document
+            docs = [Document(text=text, metadata={"source": str(path), "format": ext[1:]})]
+
+        else:
+            raise ValueError(
+                f"Unsupported file format: {ext}\n"
+                f"  Supported formats: .pdf, .docx, .txt, .md\n"
+                f"  File: {doc_path}"
+            )
+
     except Exception as e:
+        if isinstance(e, (FileNotFoundError, ValueError, ImportError)):
+            raise
         raise RuntimeError(
-            f"Failed to load PDF: {pdf_path}\n"
+            f"Failed to load document: {doc_path}\n"
             f"  Error: {type(e).__name__}: {e}\n"
-            f"  Fix: Ensure the file is a valid PDF (not corrupted)\n"
-            f"  Try opening it in a PDF viewer to verify"
+            f"  Fix: Ensure the file is valid and not corrupted"
         )
 
     if not docs:
         raise ValueError(
-            f"PDF loaded but contains no pages: {pdf_path}\n"
-            f"  The PDF may be empty or corrupted"
+            f"Document loaded but contains no content: {doc_path}\n"
+            f"  The document may be empty or corrupted"
         )
 
-    log.info(f"Loaded {len(docs)} documents/pages in {dur_s(t):.2f}s")
+    log.info(f"Loaded {len(docs)} document(s) in {dur_s(t):.2f}s")
     return docs
 
 
@@ -650,7 +769,12 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
     texts = [n.get_content(metadata_mode="none") for n in nodes]
 
     done = 0
-    for batch_idx, batch_texts in enumerate(chunked(texts, S.embed_batch), start=1):
+    batches = list(chunked(texts, S.embed_batch))
+
+    # Use tqdm if available for better progress visualization
+    iterator = tqdm(enumerate(batches, start=1), total=len(batches), desc="Embedding", unit="batch") if tqdm else enumerate(batches, start=1)
+
+    for batch_idx, batch_texts in iterator:
         tb = now_ms()
 
         # Newer versions of HuggingFaceEmbedding support batch embedding
@@ -667,9 +791,13 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
 
         done += len(batch_texts)
 
-        # Progress logs: every batch
-        rate = done / max(dur_s(t), 1e-6)
-        log.info(f"  embed batch {batch_idx:04d} -> {done}/{total} nodes | {dur_s(tb):.2f}s batch | ~{rate:.1f} nodes/s")
+        # Progress logs: every batch (but less verbose if using tqdm)
+        if not tqdm:
+            rate = done / max(dur_s(t), 1e-6)
+            log.info(f"  embed batch {batch_idx:04d} -> {done}/{total} nodes | {dur_s(tb):.2f}s batch | ~{rate:.1f} nodes/s")
+        elif batch_idx % 10 == 0:  # Log every 10 batches with tqdm
+            rate = done / max(dur_s(t), 1e-6)
+            log.debug(f"  embed progress: {done}/{total} nodes | ~{rate:.1f} nodes/s")
 
     log.info(f"Embeddings complete in {dur_s(t):.2f}s")
 
@@ -709,11 +837,16 @@ def insert_nodes(vector_store: PGVectorStore, nodes: List[TextNode]) -> None:
     batch_size = int(os.getenv("DB_INSERT_BATCH", "250"))  # tweak if needed
     inserted = 0
 
-    for bidx, batch in enumerate(chunked(nodes, batch_size), start=1):
+    batches = list(chunked(nodes, batch_size))
+    iterator = tqdm(enumerate(batches, start=1), total=len(batches), desc="Inserting", unit="batch") if tqdm else enumerate(batches, start=1)
+
+    for bidx, batch in iterator:
         tb = now_ms()
         vector_store.add(batch)
         inserted += len(batch)
-        log.info(f"  db insert batch {bidx:04d} -> {inserted}/{total} nodes | {dur_s(tb):.2f}s batch")
+
+        if not tqdm:
+            log.info(f"  db insert batch {bidx:04d} -> {inserted}/{total} nodes | {dur_s(tb):.2f}s batch")
 
     after = count_rows()
     log.info(f"Insert complete in {dur_s(t):.2f}s")
@@ -799,59 +932,148 @@ def health_check() -> None:
     log.info("Health check complete!\n")
 
 
+def run_query(query_engine: Any, question: str, show_sources: bool = True) -> None:
+    """Execute a single query and display results."""
+    log.info(f"[QUERY] {question}")
+
+    t = now_ms()
+    resp = query_engine.query(question)
+    log.info(f"LLM answered in {dur_s(t):.2f}s")
+
+    print("\n" + "="*70)
+    print("ANSWER:")
+    print("="*70)
+    print(str(resp))
+    print("="*70 + "\n")
+
+    # Show top source chunk for learning/debugging
+    if show_sources and resp.source_nodes:
+        log.info("Top source chunk:")
+        print(f"\n{resp.source_nodes[0].get_content()}\n")
+
+
+def interactive_mode(query_engine: Any) -> None:
+    """
+    Interactive REPL mode for asking multiple questions.
+    Type 'exit' or 'quit' to end session.
+    """
+    print("\n" + "="*70)
+    print("INTERACTIVE MODE")
+    print("="*70)
+    print("Ask questions about your documents. Type 'exit' or 'quit' to end.\n")
+
+    while True:
+        try:
+            question = input("Question: ").strip()
+
+            if not question:
+                continue
+
+            if question.lower() in ('exit', 'quit', 'q'):
+                print("Goodbye!")
+                break
+
+            run_query(query_engine, question, show_sources=False)
+
+        except KeyboardInterrupt:
+            print("\n\nInterrupted. Goodbye!")
+            break
+        except EOFError:
+            print("\nGoodbye!")
+            break
+        except Exception as e:
+            log.error(f"Query failed: {type(e).__name__}: {e}")
+            print(f"Error: {e}\n")
+
+
 def main():
+    # Parse CLI arguments first
+    args = parse_args()
+
+    # Override settings from CLI args
+    if args.doc:
+        S.pdf_path = args.doc
+    if args.query:
+        S.question = args.query
+
+    # Validate settings (unless explicitly skipped)
+    if not args.skip_validation:
+        S.validate()
+
     log_system_info()
 
     log.info("=== SETTINGS ===")
     log.info(f"DB: postgresql://{S.user}:***@{S.host}:{S.port}/{S.db_name} table={S.table}")
-    log.info(f"PDF_PATH: {S.pdf_path}")
+    log.info(f"Document: {S.pdf_path}")
     log.info(f"Chunking: chunk_size={S.chunk_size} overlap={S.chunk_overlap}")
     log.info(f"Retrieval: TOP_K={S.top_k}")
     log.info(f"Embeddings: model={S.embed_model_name} dim={S.embed_dim} batch={S.embed_batch}")
     log.info(f"LLM: CTX={S.context_window} MAX_NEW_TOKENS={S.max_new_tokens} TEMP={S.temperature} N_GPU_LAYERS={S.n_gpu_layers} N_BATCH={S.n_batch}")
-    log.info(f"Resets: RESET_TABLE={int(S.reset_table)} RESET_DB={int(S.reset_db)}")
+    log.info(f"Mode: {'Query-only' if args.query_only else 'Interactive' if args.interactive else 'Full pipeline'}")
 
-    # Run health checks before starting heavy operations
-    health_check()
+    if not args.skip_validation:
+        # Run health checks before starting heavy operations
+        health_check()
 
     # --- DB prep ---
     ensure_db_exists()
     ensure_pgvector_extension()
-    reset_table_if_requested()
 
-    # --- Models ---
-    embed_model = build_embed_model()
+    # --- Ingestion pipeline (skip if query-only mode) ---
+    if not args.query_only:
+        log.info("=== INDEXING DOCUMENTS ===")
+
+        # Check if table already has data
+        existing_rows = count_rows()
+        if existing_rows and existing_rows > 0 and not S.reset_table:
+            log.warning(f"Table '{S.table}' already contains {existing_rows} rows")
+            log.warning("  Set RESET_TABLE=1 to re-index, or use --query-only to skip indexing")
+            log.warning("  Proceeding will add MORE rows (incremental indexing)")
+
+        reset_table_if_requested()
+
+        # Load embedding model for indexing
+        embed_model = build_embed_model()
+
+        # --- Vector store client ---
+        vector_store = make_vector_store()
+
+        # --- Document loading and processing ---
+        docs = load_documents(S.pdf_path)
+        chunks, doc_idxs = chunk_documents(docs)
+        nodes = build_nodes(docs, chunks, doc_idxs)
+
+        embed_nodes(embed_model, nodes)
+        insert_nodes(vector_store, nodes)
+    else:
+        log.info("=== SKIPPING INDEXING (query-only mode) ===")
+        # Still need embed model for queries
+        embed_model = build_embed_model()
+        vector_store = make_vector_store()
+
+        # Verify table exists and has data
+        existing_rows = count_rows()
+        if not existing_rows or existing_rows == 0:
+            log.error(f"Table '{S.table}' is empty or doesn't exist!")
+            log.error("  You must index documents first (run without --query-only)")
+            sys.exit(1)
+        log.info(f"Using existing index with {existing_rows} rows")
+
+    # --- Build query engine ---
+    log.info("=== LOADING LLM ===")
     llm = build_llm()
 
-    # --- Vector store client ---
-    vector_store = make_vector_store()
-
-    # --- Ingestion pipeline ---
-    docs = load_pdf(S.pdf_path)
-    chunks, doc_idxs = chunk_documents(docs)
-    nodes = build_nodes(docs, chunks, doc_idxs)
-
-    embed_nodes(embed_model, nodes)
-    insert_nodes(vector_store, nodes)
-
-    # --- Retrieval + Answer pipeline ---
     retriever = VectorDBRetriever(vector_store, embed_model, similarity_top_k=S.top_k)
     query_engine = RetrieverQueryEngine.from_args(retriever, llm=llm)
 
-    log.info("=== QUESTION ===")
-    log.info(S.question)
-
-    t = now_ms()
-    resp = query_engine.query(S.question)
-    log.info(f"LLM answered in {dur_s(t):.2f}s")
-
-    log.info("=== ANSWER ===")
-    print(str(resp))  # keep answer clean in stdout
-
-    # Also show the top evidence chunk for learning/debugging
-    if resp.source_nodes:
-        log.info("=== TOP SOURCE CHUNK (most similar) ===")
-        print(resp.source_nodes[0].get_content())
+    # --- Query mode selection ---
+    if args.interactive:
+        # Interactive REPL mode
+        interactive_mode(query_engine)
+    else:
+        # Single query mode
+        log.info("=== QUESTION ===")
+        run_query(query_engine, S.question)
 
 
 if __name__ == "__main__":
