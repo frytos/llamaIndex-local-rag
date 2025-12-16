@@ -554,11 +554,21 @@ class VectorDBRetriever(BaseRetriever):
 
     def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
         q = query_bundle.query_str
-        log.info(f"[RETRIEVE] Query: {q!r}")
+
+        log.info(f"\n{'='*70}")
+        log.info(f"STEP 4: RETRIEVAL - Finding relevant chunks via vector similarity")
+        log.info(f"{'='*70}")
+        log.info(f"❓ Query: \"{q}\"")
+
+        log.info(f"\n💡 How retrieval works:")
+        log.info(f"  1. Convert query to embedding vector (same model as documents)")
+        log.info(f"  2. Calculate cosine similarity with all stored vectors")
+        log.info(f"  3. Return top-{self._similarity_top_k} most similar chunks")
+        log.info(f"  4. Similarity score: 1.0 = identical, 0.0 = unrelated")
 
         t0 = now_ms()
         q_emb = self._embed_model.get_query_embedding(q)
-        log.debug(f"[RETRIEVE] Query embedding dim={len(q_emb)} computed in {dur_s(t0):.2f}s")
+        log.info(f"\n🔢 Query embedding computed in {dur_s(t0):.2f}s ({len(q_emb)} dimensions)")
 
         t1 = now_ms()
         vsq = VectorStoreQuery(
@@ -567,7 +577,10 @@ class VectorDBRetriever(BaseRetriever):
             mode="default",
         )
         res = self._vector_store.query(vsq)
-        log.info(f"[RETRIEVE] Vector search top_k={self._similarity_top_k} returned {len(res.nodes)} nodes in {dur_s(t1):.2f}s")
+        search_time = dur_s(t1)
+        log.info(f"🔍 Vector search complete in {search_time:.2f}s")
+        log.info(f"  • Searched through stored embeddings")
+        log.info(f"  • Found top-{self._similarity_top_k} most similar chunks")
 
         out: List[NodeWithScore] = []
         for i, node in enumerate(res.nodes):
@@ -575,13 +588,38 @@ class VectorDBRetriever(BaseRetriever):
             nws = NodeWithScore(node=node, score=score)
             out.append(nws)
 
-        # Log a compact view of what was retrieved (super important for learning RAG)
+        # Calculate score distribution for quality insights
+        scores = [nws.score for nws in out if isinstance(nws.score, (int, float))]
+        if scores:
+            avg_score = sum(scores) / len(scores)
+            max_score = max(scores)
+            min_score = min(scores)
+            score_range = max_score - min_score
+
+            log.info(f"\n📊 Retrieval Quality Metrics:")
+            log.info(f"  • Best match score: {max_score:.4f}")
+            log.info(f"  • Worst match score: {min_score:.4f}")
+            log.info(f"  • Average score: {avg_score:.4f}")
+            log.info(f"  • Score range: {score_range:.4f}")
+
+            if max_score > 0.8:
+                log.info(f"  ✓ Excellent: Found highly relevant chunks (>0.8)")
+            elif max_score > 0.6:
+                log.info(f"  ✓ Good: Found relevant chunks (0.6-0.8)")
+            elif max_score > 0.4:
+                log.info(f"  ⚠️  Fair: Moderate relevance (0.4-0.6) - answer may be vague")
+            else:
+                log.info(f"  ⚠️  Poor: Low relevance (<0.4) - may not answer question")
+
+        # Log retrieved chunks with details
+        log.info(f"\n📄 Retrieved Chunks (these will be sent to LLM):")
         for i, nws in enumerate(out, start=1):
             md = nws.node.metadata or {}
             score_str = f"{nws.score:.4f}" if isinstance(nws.score, (int, float)) else "None"
-            # Some PDFs include page info in metadata depending on reader
             page = md.get("page_label") or md.get("page") or md.get("source") or "?"
-            log.info(f"[RETRIEVE]  {i}. score={score_str} page={page} text='{preview(nws.node.get_content())}'")
+
+            log.info(f"\n  {i}. Similarity: {score_str} | Source: {page}")
+            log.info(f"     Text: \"{preview(nws.node.get_content(), 200)}\"")
 
         return out
 
@@ -698,7 +736,21 @@ def load_documents(doc_path: str) -> List[Any]:
             f"  The document may be empty or corrupted"
         )
 
-    log.info(f"Loaded {len(docs)} document(s) in {dur_s(t):.2f}s")
+    # Calculate total text statistics
+    total_chars = sum(len(doc.text) for doc in docs)
+    total_words = sum(len(doc.text.split()) for doc in docs)
+    avg_chars_per_doc = total_chars / len(docs) if docs else 0
+
+    log.info(f"✓ Loaded {len(docs)} document(s) in {dur_s(t):.2f}s")
+    log.info(f"  📊 Statistics:")
+    log.info(f"    • Total characters: {total_chars:,}")
+    log.info(f"    • Total words: {total_words:,}")
+    log.info(f"    • Avg chars/doc: {avg_chars_per_doc:.0f}")
+    if ext == ".pdf":
+        log.info(f"  ℹ️  Note: PDFs are split per-page for better citation accuracy")
+    else:
+        log.info(f"  ℹ️  Note: {ext.upper()} loaded as single document for context preservation")
+
     return docs
 
 
@@ -707,25 +759,60 @@ def chunk_documents(docs: List[Any]) -> Tuple[List[str], List[int]]:
     Turn documents into text chunks.
     We keep doc_idxs so each chunk knows which doc/page it came from (for metadata/citations).
     """
-    log.info(f"Chunking: chunk_size={S.chunk_size} chunk_overlap={S.chunk_overlap}")
+    log.info(f"\n{'='*70}")
+    log.info(f"STEP 1: CHUNKING - Breaking documents into retrievable pieces")
+    log.info(f"{'='*70}")
+    log.info(f"⚙️  Configuration:")
+    log.info(f"  • chunk_size={S.chunk_size} chars")
+    log.info(f"  • chunk_overlap={S.chunk_overlap} chars ({S.chunk_overlap/S.chunk_size*100:.1f}% overlap)")
+
+    overlap_ratio = S.chunk_overlap / S.chunk_size
+    if overlap_ratio < 0.1:
+        log.info(f"  ⚠️  Low overlap may break context across chunks")
+    elif overlap_ratio > 0.3:
+        log.info(f"  ℹ️  High overlap preserves context but increases storage")
+    else:
+        log.info(f"  ✓ Good overlap ratio for context preservation")
+
+    log.info(f"\n💡 Why chunking matters:")
+    log.info(f"  • Smaller chunks = more precise retrieval, less context")
+    log.info(f"  • Larger chunks = more context, less precise matching")
+    log.info(f"  • Overlap prevents splitting important information")
+
     splitter = SentenceSplitter(chunk_size=S.chunk_size, chunk_overlap=S.chunk_overlap)
 
     t = now_ms()
     chunks: List[str] = []
     doc_idxs: List[int] = []
+    chunk_sizes: List[int] = []
+
     for doc_idx, doc in enumerate(docs):
         # Split this page's text into chunks
         cs = splitter.split_text(doc.text)
         chunks.extend(cs)
         doc_idxs.extend([doc_idx] * len(cs))
+        chunk_sizes.extend([len(c) for c in cs])
 
         # Lightweight progress log every ~25 pages
         if (doc_idx + 1) % 25 == 0:
-            log.info(f"  chunked {doc_idx+1}/{len(docs)} pages -> total_chunks_so_far={len(chunks)}")
+            log.info(f"  📄 Processed {doc_idx+1}/{len(docs)} documents → {len(chunks)} chunks so far")
 
-    log.info(f"Chunking produced {len(chunks)} chunks in {dur_s(t):.2f}s")
+    avg_chunk_size = sum(chunk_sizes) / len(chunk_sizes) if chunk_sizes else 0
+    min_chunk_size = min(chunk_sizes) if chunk_sizes else 0
+    max_chunk_size = max(chunk_sizes) if chunk_sizes else 0
+
+    log.info(f"\n✓ Chunking complete in {dur_s(t):.2f}s")
+    log.info(f"  📊 Chunk Statistics:")
+    log.info(f"    • Total chunks: {len(chunks)}")
+    log.info(f"    • Avg chunk size: {avg_chunk_size:.0f} chars")
+    log.info(f"    • Min chunk size: {min_chunk_size} chars")
+    log.info(f"    • Max chunk size: {max_chunk_size} chars")
+    log.info(f"    • Chunks per document: {len(chunks)/len(docs):.1f} average")
+
     if chunks:
-        log.debug(f"Example chunk: '{preview(chunks[0])}'")
+        log.info(f"\n  📝 Example chunk (first):")
+        log.info(f"    \"{preview(chunks[0], 150)}\"")
+
     return chunks, doc_idxs
 
 
@@ -760,7 +847,25 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
     This is often the longest step after LLM inference.
     We do batching for speed and steadier memory usage.
     """
-    log.info(f"Embedding nodes: batch_size={S.embed_batch} (this can take a while)")
+    log.info(f"\n{'='*70}")
+    log.info(f"STEP 2: EMBEDDING - Converting text to semantic vectors")
+    log.info(f"{'='*70}")
+    log.info(f"⚙️  Configuration:")
+    log.info(f"  • Model: {S.embed_model_name}")
+    log.info(f"  • Dimension: {S.embed_dim} (vector size)")
+    log.info(f"  • Batch size: {S.embed_batch} chunks/batch")
+    log.info(f"  • Total nodes: {len(nodes)}")
+
+    log.info(f"\n💡 What are embeddings?")
+    log.info(f"  • Embeddings convert text into {S.embed_dim}-dimensional vectors")
+    log.info(f"  • Similar text → similar vectors (measured by cosine similarity)")
+    log.info(f"  • This enables semantic search (meaning-based, not just keywords)")
+    log.info(f"  • Example: 'cat' and 'feline' have similar embeddings")
+
+    total_bytes = len(nodes) * S.embed_dim * 4  # 4 bytes per float32
+    log.info(f"\n📊 Storage Impact:")
+    log.info(f"  • {len(nodes)} vectors × {S.embed_dim} dims × 4 bytes = {total_bytes/1024/1024:.1f} MB")
+
     t = now_ms()
     total = len(nodes)
 
@@ -771,9 +876,12 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
     done = 0
     batches = list(chunked(texts, S.embed_batch))
 
+    log.info(f"\n🔄 Processing {len(batches)} batches...")
+
     # Use tqdm if available for better progress visualization
     iterator = tqdm(enumerate(batches, start=1), total=len(batches), desc="Embedding", unit="batch") if tqdm else enumerate(batches, start=1)
 
+    batch_times = []
     for batch_idx, batch_texts in iterator:
         tb = now_ms()
 
@@ -790,16 +898,27 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
             nodes[start_i + j].embedding = emb
 
         done += len(batch_texts)
+        batch_time = dur_s(tb)
+        batch_times.append(batch_time)
 
         # Progress logs: every batch (but less verbose if using tqdm)
         if not tqdm:
             rate = done / max(dur_s(t), 1e-6)
-            log.info(f"  embed batch {batch_idx:04d} -> {done}/{total} nodes | {dur_s(tb):.2f}s batch | ~{rate:.1f} nodes/s")
+            log.info(f"  📦 Batch {batch_idx:04d} → {done}/{total} nodes | {batch_time:.2f}s | ~{rate:.1f} nodes/s")
         elif batch_idx % 10 == 0:  # Log every 10 batches with tqdm
             rate = done / max(dur_s(t), 1e-6)
-            log.debug(f"  embed progress: {done}/{total} nodes | ~{rate:.1f} nodes/s")
+            log.debug(f"  Progress: {done}/{total} nodes | ~{rate:.1f} nodes/s")
 
-    log.info(f"Embeddings complete in {dur_s(t):.2f}s")
+    total_time = dur_s(t)
+    avg_batch_time = sum(batch_times) / len(batch_times) if batch_times else 0
+    throughput = total / total_time if total_time > 0 else 0
+
+    log.info(f"\n✓ Embeddings complete in {total_time:.2f}s")
+    log.info(f"  📊 Performance:")
+    log.info(f"    • Average batch time: {avg_batch_time:.2f}s")
+    log.info(f"    • Throughput: {throughput:.1f} nodes/second")
+    log.info(f"    • Time per node: {total_time/total*1000:.1f}ms")
+    log.info(f"\n  ℹ️  These embeddings enable semantic similarity search in the next step")
 
 
 def make_vector_store() -> PGVectorStore:
@@ -827,17 +946,32 @@ def insert_nodes(vector_store: PGVectorStore, nodes: List[TextNode]) -> None:
       - keep transactions smaller
       - show progress clearly
     """
-    log.info("Inserting nodes into Postgres (vector_store.add)")
+    log.info(f"\n{'='*70}")
+    log.info(f"STEP 3: STORAGE - Saving embeddings to PostgreSQL + pgvector")
+    log.info(f"{'='*70}")
+
     before = count_rows()
     if before is not None:
-        log.info(f"Rows before insert: {before}")
+        log.info(f"📊 Current table state: {before} rows exist")
+
+    batch_size = int(os.getenv("DB_INSERT_BATCH", "250"))
+    log.info(f"⚙️  Configuration:")
+    log.info(f"  • Table: {S.table}")
+    log.info(f"  • Batch size: {batch_size} nodes/batch")
+    log.info(f"  • Total to insert: {len(nodes)} nodes")
+
+    log.info(f"\n💡 Why use pgvector?")
+    log.info(f"  • Specialized PostgreSQL extension for vector similarity search")
+    log.info(f"  • Efficient indexing (IVFFlat, HNSW) for fast retrieval")
+    log.info(f"  • Supports cosine distance, L2 distance, inner product")
+    log.info(f"  • Production-ready: ACID compliance + SQL features")
 
     t = now_ms()
     total = len(nodes)
-    batch_size = int(os.getenv("DB_INSERT_BATCH", "250"))  # tweak if needed
     inserted = 0
 
     batches = list(chunked(nodes, batch_size))
+    log.info(f"\n🔄 Inserting {len(batches)} batches...")
     iterator = tqdm(enumerate(batches, start=1), total=len(batches), desc="Inserting", unit="batch") if tqdm else enumerate(batches, start=1)
 
     for bidx, batch in iterator:
@@ -846,12 +980,21 @@ def insert_nodes(vector_store: PGVectorStore, nodes: List[TextNode]) -> None:
         inserted += len(batch)
 
         if not tqdm:
-            log.info(f"  db insert batch {bidx:04d} -> {inserted}/{total} nodes | {dur_s(tb):.2f}s batch")
+            log.info(f"  💾 Batch {bidx:04d} → {inserted}/{total} nodes | {dur_s(tb):.2f}s")
+
+    total_time = dur_s(t)
+    throughput = total / total_time if total_time > 0 else 0
 
     after = count_rows()
-    log.info(f"Insert complete in {dur_s(t):.2f}s")
+    log.info(f"\n✓ Storage complete in {total_time:.2f}s")
+    log.info(f"  📊 Results:")
+    log.info(f"    • Inserted: {total} nodes")
+    log.info(f"    • Throughput: {throughput:.1f} nodes/second")
     if after is not None:
-        log.info(f"Rows after insert: {after}")
+        log.info(f"    • Total rows in table: {after}")
+        if before is not None:
+            log.info(f"    • New rows added: {after - before}")
+    log.info(f"\n  ✓ Vector index is now ready for semantic search!")
 
 
 def health_check() -> None:
@@ -934,22 +1077,58 @@ def health_check() -> None:
 
 def run_query(query_engine: Any, question: str, show_sources: bool = True) -> None:
     """Execute a single query and display results."""
-    log.info(f"[QUERY] {question}")
+    log.info(f"\n{'='*70}")
+    log.info(f"STEP 5: GENERATION - LLM synthesizes answer from retrieved chunks")
+    log.info(f"{'='*70}")
 
+    log.info(f"\n💡 How answer generation works:")
+    log.info(f"  1. Retrieved chunks are combined into context")
+    log.info(f"  2. Context + query sent to local LLM")
+    log.info(f"  3. LLM generates answer grounded in provided context")
+    log.info(f"  4. This prevents hallucination (making up information)")
+
+    log.info(f"\n⚙️  LLM Configuration:")
+    log.info(f"  • Model: Mistral 7B Instruct (Q4_K_M quantized)")
+    log.info(f"  • Temperature: {S.temperature} ({'factual/deterministic' if S.temperature < 0.3 else 'balanced' if S.temperature < 0.7 else 'creative'})")
+    log.info(f"  • Max tokens: {S.max_new_tokens}")
+    log.info(f"  • Context window: {S.context_window}")
+
+    log.info(f"\n🔄 Generating answer...")
     t = now_ms()
     resp = query_engine.query(question)
-    log.info(f"LLM answered in {dur_s(t):.2f}s")
+    generation_time = dur_s(t)
+
+    # Calculate token statistics
+    answer_length = len(str(resp))
+    answer_words = len(str(resp).split())
+    tokens_per_second = answer_words / generation_time if generation_time > 0 else 0
+
+    log.info(f"\n✓ Answer generated in {generation_time:.2f}s")
+    log.info(f"  📊 Generation Stats:")
+    log.info(f"    • Answer length: {answer_length} characters, {answer_words} words")
+    log.info(f"    • Speed: ~{tokens_per_second:.1f} words/second")
+    log.info(f"    • Time per word: {generation_time/answer_words*1000:.0f}ms") if answer_words > 0 else None
 
     print("\n" + "="*70)
-    print("ANSWER:")
+    print("✨ FINAL ANSWER:")
     print("="*70)
     print(str(resp))
     print("="*70 + "\n")
 
-    # Show top source chunk for learning/debugging
+    # Show sources for transparency
     if show_sources and resp.source_nodes:
-        log.info("Top source chunk:")
-        print(f"\n{resp.source_nodes[0].get_content()}\n")
+        log.info(f"\n📚 Sources Used ({len(resp.source_nodes)} chunks):")
+        for i, node in enumerate(resp.source_nodes[:3], 1):  # Show top 3
+            md = node.node.metadata or {}
+            page = md.get("page_label") or md.get("page") or md.get("source") or "?"
+            score = node.score if hasattr(node, 'score') else None
+            score_str = f" (similarity: {score:.4f})" if score else ""
+            log.info(f"  {i}. Source: {page}{score_str}")
+            log.info(f"     \"{preview(node.node.get_content(), 150)}\"")
+        if len(resp.source_nodes) > 3:
+            log.info(f"  ... and {len(resp.source_nodes) - 3} more chunks")
+
+        log.info(f"\n  ℹ️  Answer is grounded in these retrieved chunks")
 
 
 def interactive_mode(query_engine: Any) -> None:
