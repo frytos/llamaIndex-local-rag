@@ -1,9 +1,12 @@
 #!/bin/bash
 
 # RAG Query Performance Monitor for M1 Mac
-# Usage: ./monitor_query.sh [query_text]
+# Usage: ./scripts/monitor_query.sh [query_text]
 
 set -e
+
+# Change to project root (parent of scripts/)
+cd "$(dirname "$0")/.."
 
 # Colors for output
 RED='\033[0;31m'
