@@ -23,6 +23,8 @@ import platform
 import logging
 import argparse
 import hashlib
+import json
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Iterable, Tuple
 from pathlib import Path
@@ -210,8 +212,8 @@ class Settings:
     reset_db: bool = os.getenv("RESET_DB", "0") == "1"
 
     # Chunking knobs (RAG quality knobs)
-    chunk_size: int = int(os.getenv("CHUNK_SIZE", "900"))
-    chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "120"))
+    chunk_size: int = int(os.getenv("CHUNK_SIZE", "700"))
+    chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "150"))
 
     # Retrieval knobs
     top_k: int = int(os.getenv("TOP_K", "4"))
@@ -514,23 +516,201 @@ def reset_table_if_requested():
 def count_rows() -> Optional[int]:
     """
     Useful to see ingestion effect. If table doesn't exist yet, return None.
+    Note: PGVectorStore adds 'data_' prefix to table names.
     """
     try:
         conn = db_conn()
+        # PGVectorStore uses "data_{table_name}" format
+        actual_table = f"data_{S.table}"
         with conn.cursor() as c:
-            c.execute(f'SELECT COUNT(*) FROM "{S.table}";')
+            c.execute(f'SELECT COUNT(*) FROM "{actual_table}";')
             n = int(c.fetchone()[0])
         conn.close()
         return n
     except psycopg2.errors.UndefinedTable:
         # Table doesn't exist yet - this is expected on first run
-        log.debug(f"Table '{S.table}' does not exist yet (normal for first run)")
+        log.debug(f"Table 'data_{S.table}' does not exist yet (normal for first run)")
         return None
     except PgOperationalError as e:
         log.warning(f"Failed to count rows (database connection issue): {e}")
         return None
     except Exception as e:
         log.warning(f"Failed to count rows: {type(e).__name__}: {e}")
+        return None
+
+
+def check_index_configuration() -> Optional[dict]:
+    """
+    Check the configuration of existing index by sampling stored metadata.
+    Returns dict with configuration info, or None if table doesn't exist or is empty.
+
+    This helps detect "mixed index" scenarios where the table contains chunks
+    created with different chunk_size/overlap settings.
+    """
+    try:
+        conn = db_conn()
+        actual_table = f"data_{S.table}"
+
+        with conn.cursor() as c:
+            # Sample some rows to check their metadata
+            # We check both old and new rows in case there's a mix
+            c.execute(f'''
+                SELECT metadata, id FROM "{actual_table}"
+                ORDER BY id LIMIT 10
+            ''')
+            rows = c.fetchall()
+
+        conn.close()
+
+        if not rows:
+            return None
+
+        # Extract configurations from sampled rows
+        configs = []
+        for metadata, row_id in rows:
+            if metadata and isinstance(metadata, dict):
+                config = {
+                    "chunk_size": metadata.get("_chunk_size"),
+                    "chunk_overlap": metadata.get("_chunk_overlap"),
+                    "embed_model": metadata.get("_embed_model"),
+                    "index_signature": metadata.get("_index_signature"),
+                }
+                configs.append(config)
+
+        if not configs:
+            # Old index without metadata - can't determine configuration
+            return {"legacy": True, "has_metadata": False}
+
+        # Check if all configs are the same
+        first_config = configs[0]
+        all_same = all(c == first_config for c in configs)
+
+        result = {
+            "legacy": False,
+            "has_metadata": True,
+            "chunk_size": first_config.get("chunk_size"),
+            "chunk_overlap": first_config.get("chunk_overlap"),
+            "embed_model": first_config.get("embed_model"),
+            "index_signature": first_config.get("index_signature"),
+            "is_consistent": all_same,
+            "sampled_configs": len(set(str(c) for c in configs)),
+        }
+
+        return result
+
+    except psycopg2.errors.UndefinedTable:
+        return None
+    except Exception as e:
+        log.warning(f"Failed to check index configuration: {type(e).__name__}: {e}")
+        return None
+
+
+def save_query_log(
+    question: str,
+    answer: str,
+    retrieved_chunks: List[Any],
+    retrieval_time: float,
+    generation_time: float,
+    parameters: dict
+) -> Optional[str]:
+    """
+    Save query results to a structured JSON log file.
+
+    Args:
+        question: The query text
+        answer: The generated answer
+        retrieved_chunks: List of retrieved NodeWithScore objects
+        retrieval_time: Time taken for retrieval (seconds)
+        generation_time: Time taken for generation (seconds)
+        parameters: Dictionary of all relevant parameters
+
+    Returns:
+        Path to the log file, or None if logging is disabled
+    """
+    # Check if logging is enabled
+    if os.getenv("LOG_QUERIES", "0") != "1":
+        return None
+
+    try:
+        # Create log directory structure
+        log_dir = Path("query_logs") / S.table
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate timestamp-based filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        log_file = log_dir / f"{timestamp}_query.json"
+
+        # Process retrieved chunks
+        chunks_data = []
+        for i, chunk in enumerate(retrieved_chunks):
+            chunk_info = {
+                "rank": i + 1,
+                "similarity_score": float(chunk.score) if hasattr(chunk, 'score') and chunk.score is not None else None,
+                "text": chunk.node.get_content(),
+                "text_length": len(chunk.node.get_content()),
+                "metadata": chunk.node.metadata if hasattr(chunk.node, 'metadata') else {}
+            }
+            chunks_data.append(chunk_info)
+
+        # Calculate retrieval quality metrics
+        scores = [c["similarity_score"] for c in chunks_data if c["similarity_score"] is not None]
+        quality_metrics = {}
+        if scores:
+            quality_metrics = {
+                "best_score": max(scores),
+                "worst_score": min(scores),
+                "average_score": sum(scores) / len(scores),
+                "score_range": max(scores) - min(scores)
+            }
+
+        # Build complete log structure
+        log_data = {
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "document_table": S.table,
+                "pdf_path": S.pdf_path,
+                "log_file": str(log_file)
+            },
+            "query": {
+                "question": question,
+                "question_length": len(question),
+                "question_words": len(question.split())
+            },
+            "parameters": parameters,
+            "retrieval": {
+                "retrieved_chunks": chunks_data,
+                "num_chunks": len(chunks_data),
+                "retrieval_time_seconds": round(retrieval_time, 3),
+                "quality_metrics": quality_metrics
+            },
+            "generation": {
+                "answer": answer,
+                "answer_length": len(answer),
+                "answer_words": len(answer.split()),
+                "generation_time_seconds": round(generation_time, 3),
+                "tokens_per_second": round(len(answer.split()) / generation_time, 2) if generation_time > 0 else 0
+            },
+            "performance": {
+                "total_time_seconds": round(retrieval_time + generation_time, 3),
+                "retrieval_percentage": round((retrieval_time / (retrieval_time + generation_time)) * 100, 1) if (retrieval_time + generation_time) > 0 else 0,
+                "generation_percentage": round((generation_time / (retrieval_time + generation_time)) * 100, 1) if (retrieval_time + generation_time) > 0 else 0
+            }
+        }
+
+        # Write to file with pretty formatting
+        with open(log_file, 'w', encoding='utf-8') as f:
+            json.dump(log_data, f, indent=2, ensure_ascii=False)
+
+        log.info(f"\n💾 Query log saved to: {log_file}")
+        log.info(f"   • Question: {len(question)} chars")
+        log.info(f"   • Answer: {len(answer)} chars")
+        log.info(f"   • Chunks: {len(chunks_data)}")
+        log.info(f"   • Total time: {retrieval_time + generation_time:.2f}s")
+
+        return str(log_file)
+
+    except Exception as e:
+        log.warning(f"Failed to save query log: {type(e).__name__}: {e}")
         return None
 
 
@@ -550,10 +730,12 @@ class VectorDBRetriever(BaseRetriever):
         self._vector_store = vector_store
         self._embed_model = embed_model
         self._similarity_top_k = similarity_top_k
+        self.last_retrieval_time = 0.0  # Track last retrieval time for logging
         super().__init__()
 
     def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
         q = query_bundle.query_str
+        retrieval_start = now_ms()  # Track total retrieval time
 
         log.info(f"\n{'='*70}")
         log.info(f"STEP 4: RETRIEVAL - Finding relevant chunks via vector similarity")
@@ -613,13 +795,36 @@ class VectorDBRetriever(BaseRetriever):
 
         # Log retrieved chunks with details
         log.info(f"\n📄 Retrieved Chunks (these will be sent to LLM):")
+
+        # Check if retrieved chunks have configuration metadata
+        chunk_configs_seen = set()
         for i, nws in enumerate(out, start=1):
             md = nws.node.metadata or {}
             score_str = f"{nws.score:.4f}" if isinstance(nws.score, (int, float)) else "None"
             page = md.get("page_label") or md.get("page") or md.get("source") or "?"
 
-            log.info(f"\n  {i}. Similarity: {score_str} | Source: {page}")
+            # Track chunk configurations
+            chunk_config = md.get("_index_signature", "unknown")
+            chunk_configs_seen.add(chunk_config)
+
+            # Show configuration for first chunk or if it differs
+            config_info = ""
+            if i == 1 or len(chunk_configs_seen) > 1:
+                chunk_size = md.get("_chunk_size", "?")
+                chunk_overlap = md.get("_chunk_overlap", "?")
+                config_info = f" [cs={chunk_size}, ov={chunk_overlap}]"
+
+            log.info(f"\n  {i}. Similarity: {score_str} | Source: {page}{config_info}")
             log.info(f"     Text: \"{preview(nws.node.get_content(), 200)}\"")
+
+        # Warn if mixed configurations detected in retrieval
+        if len(chunk_configs_seen) > 1:
+            log.warning(f"\n  ⚠️  WARNING: Retrieved chunks from {len(chunk_configs_seen)} different configurations!")
+            log.warning(f"  ⚠️  This indicates a mixed index - results may be unpredictable")
+            log.warning(f"  ⚠️  Consider rebuilding with RESET_TABLE=1")
+
+        # Store total retrieval time for logging
+        self.last_retrieval_time = dur_s(retrieval_start)
 
         return out
 
@@ -820,17 +1025,32 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
     """
     Create TextNode objects (text + metadata).
     Embedding is added later.
+
+    IMPORTANT: We store chunking parameters in metadata so we can:
+    - Detect mixed-index scenarios (different chunk_size in same table)
+    - Debug retrieval quality issues
+    - Track what configuration produced each chunk
     """
     log.info("Building TextNode objects (text + metadata)")
     t = now_ms()
+
+    # Create an index signature to track chunking configuration
+    index_signature = f"cs{S.chunk_size}_ov{S.chunk_overlap}_{S.embed_model_name.replace('/', '_')}"
 
     nodes: List[TextNode] = []
     for i, chunk in enumerate(chunks):
         n = TextNode(text=chunk)
 
-        # Metadata (usually contains source file and page label/number)
+        # Start with source document metadata
         src_doc = docs[doc_idxs[i]]
-        n.metadata = src_doc.metadata
+        n.metadata = src_doc.metadata.copy() if src_doc.metadata else {}
+
+        # Add chunking parameters to metadata
+        # This allows detection of mixed indexes and better debugging
+        n.metadata["_chunk_size"] = S.chunk_size
+        n.metadata["_chunk_overlap"] = S.chunk_overlap
+        n.metadata["_embed_model"] = S.embed_model_name
+        n.metadata["_index_signature"] = index_signature
 
         nodes.append(n)
 
@@ -838,6 +1058,7 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
             log.info(f"  built {i+1}/{len(chunks)} nodes")
 
     log.info(f"Built {len(nodes)} nodes in {dur_s(t):.2f}s")
+    log.info(f"Index signature: {index_signature}")
     return nodes
 
 
@@ -1075,7 +1296,7 @@ def health_check() -> None:
     log.info("Health check complete!\n")
 
 
-def run_query(query_engine: Any, question: str, show_sources: bool = True) -> None:
+def run_query(query_engine: Any, question: str, show_sources: bool = True, retrieval_time: float = 0.0) -> None:
     """Execute a single query and display results."""
     log.info(f"\n{'='*70}")
     log.info(f"STEP 5: GENERATION - LLM synthesizes answer from retrieved chunks")
@@ -1130,8 +1351,33 @@ def run_query(query_engine: Any, question: str, show_sources: bool = True) -> No
 
         log.info(f"\n  ℹ️  Answer is grounded in these retrieved chunks")
 
+    # Save query log if enabled
+    if os.getenv("LOG_QUERIES", "0") == "1":
+        parameters = {
+            "chunk_size": S.chunk_size,
+            "chunk_overlap": S.chunk_overlap,
+            "top_k": S.top_k,
+            "temperature": S.temperature,
+            "max_new_tokens": S.max_new_tokens,
+            "context_window": S.context_window,
+            "n_gpu_layers": S.n_gpu_layers,
+            "n_batch": S.n_batch,
+            "embed_model": S.embed_model_name,
+            "embed_dim": S.embed_dim,
+            "embed_batch": S.embed_batch
+        }
 
-def interactive_mode(query_engine: Any) -> None:
+        save_query_log(
+            question=question,
+            answer=str(resp),
+            retrieved_chunks=resp.source_nodes if hasattr(resp, 'source_nodes') else [],
+            retrieval_time=retrieval_time,
+            generation_time=generation_time,
+            parameters=parameters
+        )
+
+
+def interactive_mode(query_engine: Any, retriever: VectorDBRetriever) -> None:
     """
     Interactive REPL mode for asking multiple questions.
     Type 'exit' or 'quit' to end session.
@@ -1152,7 +1398,7 @@ def interactive_mode(query_engine: Any) -> None:
                 print("Goodbye!")
                 break
 
-            run_query(query_engine, question, show_sources=False)
+            run_query(query_engine, question, show_sources=False, retrieval_time=retriever.last_retrieval_time)
 
         except KeyboardInterrupt:
             print("\n\nInterrupted. Goodbye!")
@@ -1190,6 +1436,14 @@ def main():
     log.info(f"LLM: CTX={S.context_window} MAX_NEW_TOKENS={S.max_new_tokens} TEMP={S.temperature} N_GPU_LAYERS={S.n_gpu_layers} N_BATCH={S.n_batch}")
     log.info(f"Mode: {'Query-only' if args.query_only else 'Interactive' if args.interactive else 'Full pipeline'}")
 
+    # Suggest configuration-specific table names for experimentation
+    if S.table in ["llama2_paper", "ethical-slut_paper"]:  # Default table names
+        suggested_table = f"{S.table}_cs{S.chunk_size}_ov{S.chunk_overlap}"
+        log.info("")
+        log.info("💡 TIP: When experimenting with chunk_size, use config-specific table names:")
+        log.info(f"   PGTABLE={suggested_table}")
+        log.info("   This keeps each configuration in a separate, clean index.")
+
     if not args.skip_validation:
         # Run health checks before starting heavy operations
         health_check()
@@ -1206,6 +1460,37 @@ def main():
         existing_rows = count_rows()
         if existing_rows and existing_rows > 0 and not S.reset_table:
             log.warning(f"Table '{S.table}' already contains {existing_rows} rows")
+
+            # Check the configuration of existing index
+            existing_config = check_index_configuration()
+            current_signature = f"cs{S.chunk_size}_ov{S.chunk_overlap}_{S.embed_model_name.replace('/', '_')}"
+
+            if existing_config:
+                if existing_config.get("legacy") or not existing_config.get("has_metadata"):
+                    log.warning("  ⚠️  LEGACY INDEX: Existing rows don't have configuration metadata")
+                    log.warning("  ⚠️  Cannot detect if chunk_size matches current settings")
+                elif not existing_config.get("is_consistent"):
+                    log.error("  ❌ MIXED INDEX DETECTED: Table contains chunks from multiple configurations!")
+                    log.error("  ❌ This will produce unreliable retrieval results")
+                    log.error("  ❌ You should set RESET_TABLE=1 to clean up")
+                elif existing_config.get("index_signature") != current_signature:
+                    log.error("  ❌ CONFIGURATION MISMATCH DETECTED!")
+                    log.error(f"  Current config: chunk_size={S.chunk_size}, overlap={S.chunk_overlap}, model={S.embed_model_name}")
+                    log.error(f"  Existing index: chunk_size={existing_config.get('chunk_size')}, overlap={existing_config.get('chunk_overlap')}, model={existing_config.get('embed_model')}")
+                    log.error("")
+                    log.error("  ❌ Proceeding will create a MIXED INDEX (same table, different chunk sizes)")
+                    log.error("  ❌ This causes retrieval to return chunks from BOTH configurations")
+                    log.error("  ❌ The chunk_size parameter will appear to 'do nothing' because old chunks still exist")
+                    log.error("")
+                    log.error("  FIX OPTIONS:")
+                    log.error("    1. Set RESET_TABLE=1 to rebuild with new config")
+                    log.error(f"    2. Use different table name: PGTABLE=ethical-slut_cs{S.chunk_size}_ov{S.chunk_overlap}")
+                    log.error("    3. Use --query-only to query existing index without adding more rows")
+                    log.error("")
+                    sys.exit(1)
+                else:
+                    log.info(f"  ✓ Configuration matches existing index: {existing_config.get('index_signature')}")
+
             log.warning("  Set RESET_TABLE=1 to re-index, or use --query-only to skip indexing")
             log.warning("  Proceeding will add MORE rows (incremental indexing)")
 
@@ -1238,6 +1523,27 @@ def main():
             sys.exit(1)
         log.info(f"Using existing index with {existing_rows} rows")
 
+        # Check if current parameters match the indexed data
+        existing_config = check_index_configuration()
+        current_signature = f"cs{S.chunk_size}_ov{S.chunk_overlap}_{S.embed_model_name.replace('/', '_')}"
+
+        if existing_config:
+            if existing_config.get("legacy") or not existing_config.get("has_metadata"):
+                log.warning("  ⚠️  Querying LEGACY INDEX (no configuration metadata)")
+                log.warning("  ⚠️  Cannot verify if chunk_size/overlap match query expectations")
+            elif not existing_config.get("is_consistent"):
+                log.warning("  ⚠️  MIXED INDEX: Table contains chunks from multiple configurations")
+                log.warning("  ⚠️  Results may be inconsistent - consider rebuilding with RESET_TABLE=1")
+            elif existing_config.get("index_signature") != current_signature:
+                log.warning("  ⚠️  CONFIGURATION MISMATCH:")
+                log.warning(f"    Query params: chunk_size={S.chunk_size}, overlap={S.chunk_overlap}")
+                log.warning(f"    Index params: chunk_size={existing_config.get('chunk_size')}, overlap={existing_config.get('chunk_overlap')}")
+                log.warning("  ⚠️  The CHUNK_SIZE you set doesn't affect retrieval - it only affects indexing!")
+                log.warning("  ⚠️  You're querying chunks that were created with the index configuration above")
+                log.warning(f"  💡 To query with chunk_size={S.chunk_size}, you need to re-index with RESET_TABLE=1")
+            else:
+                log.info(f"  ✓ Query configuration matches index: {existing_config.get('index_signature')}")
+
     # --- Build query engine ---
     log.info("=== LOADING LLM ===")
     llm = build_llm()
@@ -1248,11 +1554,11 @@ def main():
     # --- Query mode selection ---
     if args.interactive:
         # Interactive REPL mode
-        interactive_mode(query_engine)
+        interactive_mode(query_engine, retriever)
     else:
         # Single query mode
         log.info("=== QUESTION ===")
-        run_query(query_engine, S.question)
+        run_query(query_engine, S.question, retrieval_time=retriever.last_retrieval_time)
 
 
 if __name__ == "__main__":
