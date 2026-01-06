@@ -2,7 +2,22 @@
 🚀 RUNPOD STARTUP COMMAND - COPY THIS
 ========================================
 
-Dans Runpod UI, champ "Docker Command", colle cette ligne:
+⚠️  REPO PRIVÉ - Configure authentication d'abord!
+
+Option 1: Utiliser un Personal Access Token (PAT)
+Dans Runpod UI, ajoute cette Environment Variable:
+  GH_TOKEN=ghp_ton_token_ici
+
+Puis utilise cette commande dans "Docker Command":
+
+bash -c "apt-get update -qq && apt-get install -y git && git clone https://\${GH_TOKEN}@github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
+
+----------------------------------------
+
+Option 2: Rendre le repo Public temporairement
+gh repo edit --visibility public
+
+Puis utilise cette commande:
 
 bash -c "apt-get update -qq && apt-get install -y git && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
 

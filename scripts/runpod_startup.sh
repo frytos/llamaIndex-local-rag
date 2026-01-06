@@ -13,6 +13,8 @@ echo ""
 # Configuration
 # ==========================================
 REPO_URL="${REPO_URL:-https://github.com/frytos/llamaIndex-local-rag.git}"
+# Note: This is a private repo. Set GH_TOKEN env var for authentication:
+# REPO_URL="https://${GH_TOKEN}@github.com/frytos/llamaIndex-local-rag.git"
 WORK_DIR="/workspace/rag-pipeline"
 VENV_DIR="$WORK_DIR/.venv"
 
