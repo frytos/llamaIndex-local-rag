@@ -49,9 +49,9 @@ echo ""
 echo "🎮 [5/6] Testing GPU + PyTorch..."
 echo "────────────────────────────────────────────────────────────"
 cd /workspace/rag-pipeline
-source .venv/bin/activate
 
-python3 << 'EOF'
+# Use venv python directly (activation doesn't work in scripts)
+/workspace/rag-pipeline/.venv/bin/python3 << 'EOF'
 import torch
 import sys
 
@@ -86,8 +86,8 @@ echo ""
 echo "🧪 [6/6] Testing RAG script..."
 echo "────────────────────────────────────────────────────────────"
 
-# Test that script can be imported
-python3 << 'EOF'
+# Test that script can be imported (use venv python directly)
+/workspace/rag-pipeline/.venv/bin/python3 << 'EOF'
 import sys
 sys.path.insert(0, '/workspace/rag-pipeline')
 
