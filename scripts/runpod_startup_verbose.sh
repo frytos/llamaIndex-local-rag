@@ -128,9 +128,9 @@ if [ "${SETUP_POSTGRES:-0}" = "1" ]; then
     echo "────────────────────────────────────"
 
     if ! command -v psql &> /dev/null; then
-        echo "  📥 Installing PostgreSQL (this may take 1-2 minutes)..."
+        echo "  📥 Installing PostgreSQL + pgvector extension (this may take 1-2 minutes)..."
         apt-get update
-        apt-get install -y postgresql postgresql-contrib
+        apt-get install -y postgresql postgresql-contrib postgresql-14-pgvector
     fi
 
     echo "  🚀 Starting PostgreSQL..."

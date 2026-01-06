@@ -120,9 +120,9 @@ if [ "${SETUP_POSTGRES:-0}" = "1" ]; then
 
     # Check if PostgreSQL is already installed
     if ! command -v psql &> /dev/null; then
-        echo "  Installing PostgreSQL..."
+        echo "  Installing PostgreSQL + pgvector extension..."
         apt-get update -qq
-        apt-get install -y -qq postgresql postgresql-contrib
+        apt-get install -y -qq postgresql postgresql-contrib postgresql-14-pgvector
     fi
 
     # Start PostgreSQL
