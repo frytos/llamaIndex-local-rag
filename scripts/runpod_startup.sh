@@ -57,23 +57,42 @@ echo ""
 # 4. Install Dependencies
 # ==========================================
 echo "📦 Installing dependencies..."
-pip install --quiet --upgrade pip
+echo "  This may take 2-4 minutes on first run..."
+echo ""
+
+echo "  [1/3] Upgrading pip..."
+pip install --upgrade pip 2>&1 | grep -E "(Successfully|Requirement|Collecting)" || echo "    (in progress...)"
 
 if [ -f "requirements.txt" ]; then
-    pip install --quiet -r requirements.txt
+    echo ""
+    echo "  [2/3] Installing requirements.txt..."
+    echo "  ────────────────────────────────────"
+
+    # Show progress for each package
+    pip install -r requirements.txt 2>&1 | grep -E "(Successfully|Requirement|Collecting|Installing|Downloading)" | sed 's/^/    /'
+
+    echo "  ────────────────────────────────────"
     echo "✅ Requirements installed"
 else
     echo "⚠️  requirements.txt not found"
 fi
 
 # Install PyTorch with CUDA (if not already installed)
+echo ""
 if ! python3 -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
-    echo "🔥 Installing PyTorch with CUDA 12.4..."
-    pip install --quiet torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 \
-        --index-url https://download.pytorch.org/whl/cu124
+    echo "  [3/3] Installing PyTorch 2.4.0 + CUDA 12.4..."
+    echo "  ────────────────────────────────────"
+    echo "  ⏳ This is a large download (~2GB), please be patient..."
+
+    pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 \
+        --index-url https://download.pytorch.org/whl/cu124 2>&1 | \
+        grep -E "(Successfully|Requirement|Collecting|Installing|Downloading|%)" | \
+        sed 's/^/    /'
+
+    echo "  ────────────────────────────────────"
     echo "✅ PyTorch installed"
 else
-    echo "✅ PyTorch with CUDA already installed"
+    echo "  [3/3] PyTorch with CUDA already installed ✅"
 fi
 echo ""
 
