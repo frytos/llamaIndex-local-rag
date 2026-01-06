@@ -128,9 +128,24 @@ if [ "${SETUP_POSTGRES:-0}" = "1" ]; then
     echo "────────────────────────────────────"
 
     if ! command -v psql &> /dev/null; then
-        echo "  📥 Installing PostgreSQL + pgvector extension (this may take 1-2 minutes)..."
+        echo "  📥 Installing PostgreSQL (this may take 1-2 minutes)..."
         apt-get update
-        apt-get install -y postgresql postgresql-contrib postgresql-14-pgvector
+        apt-get install -y postgresql postgresql-contrib
+    fi
+
+    # Install pgvector extension (not in Ubuntu repos, compile from source)
+    if [ ! -f "/usr/share/postgresql/14/extension/vector.control" ]; then
+        echo "  🔨 Compiling pgvector extension from source (~30 seconds)..."
+        apt-get install -y build-essential postgresql-server-dev-14 git
+
+        cd /tmp
+        git clone --branch v0.7.4 --depth 1 https://github.com/pgvector/pgvector.git
+        cd pgvector
+        make
+        make install
+        cd /workspace/rag-pipeline
+
+        echo "  ✅ pgvector compiled and installed"
     fi
 
     echo "  🚀 Starting PostgreSQL..."
