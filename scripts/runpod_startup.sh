@@ -120,9 +120,24 @@ if [ "${SETUP_POSTGRES:-0}" = "1" ]; then
 
     # Check if PostgreSQL is already installed
     if ! command -v psql &> /dev/null; then
-        echo "  Installing PostgreSQL + pgvector extension..."
+        echo "  Installing PostgreSQL..."
         apt-get update -qq
-        apt-get install -y -qq postgresql postgresql-contrib postgresql-14-pgvector
+        apt-get install -y -qq postgresql postgresql-contrib
+    fi
+
+    # Install pgvector extension (not in Ubuntu repos, compile from source)
+    if [ ! -f "/usr/share/postgresql/14/extension/vector.control" ]; then
+        echo "  Installing pgvector extension from source..."
+        apt-get install -y -qq build-essential postgresql-server-dev-14 git
+
+        cd /tmp
+        git clone --branch v0.7.4 --depth 1 https://github.com/pgvector/pgvector.git
+        cd pgvector
+        make -s
+        make install -s
+        cd /workspace/rag-pipeline
+
+        echo "  ✅ pgvector compiled and installed"
     fi
 
     # Start PostgreSQL
@@ -217,8 +232,11 @@ echo "    --query 'when did I go to New York'"
 echo ""
 echo "================================================"
 
-# Keep container running (if this is the main process)
-if [ "${KEEP_ALIVE:-0}" = "1" ]; then
-    echo "🔄 Keeping container alive..."
-    tail -f /dev/null
-fi
+# Keep container running (ALWAYS, to prevent restart loop)
+# This is essential in Runpod when using Docker Command
+echo "🔄 Keeping container alive (press Ctrl+C to exit)..."
+echo "   SSH into the pod to use it: ssh <pod-address>"
+echo ""
+
+# Keep process running forever
+tail -f /dev/null

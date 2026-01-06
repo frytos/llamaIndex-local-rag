@@ -256,8 +256,11 @@ echo ""
 echo "📝 Logs saved to: /tmp/runpod_setup.log"
 echo ""
 
-# Keep container running (if this is the main process)
-if [ "${KEEP_ALIVE:-0}" = "1" ]; then
-    echo "🔄 Keeping container alive..."
-    tail -f /dev/null
-fi
+# Keep container running (ALWAYS, to prevent restart loop)
+# This is essential in Runpod when using Docker Command
+echo "🔄 Keeping container alive (press Ctrl+C to exit)..."
+echo "   SSH into the pod to use it: ssh <pod-address>"
+echo ""
+
+# Keep process running forever
+tail -f /dev/null
