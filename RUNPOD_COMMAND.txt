@@ -10,7 +10,7 @@ Dans Runpod UI, ajoute cette Environment Variable:
 
 Puis utilise cette commande dans "Docker Command":
 
-bash -c "apt-get update -qq && apt-get install -y git && git clone https://\${GH_TOKEN}@github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
+bash -c "apt-get update -qq && apt-get install -y git && rm -rf /workspace/rag-pipeline && git clone https://\${GH_TOKEN}@github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
 
 ----------------------------------------
 
@@ -19,7 +19,7 @@ gh repo edit --visibility public
 
 Puis utilise cette commande:
 
-bash -c "apt-get update -qq && apt-get install -y git && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
+bash -c "apt-get update -qq && apt-get install -y git && rm -rf /workspace/rag-pipeline && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
 
 ========================================
 ⚙️ CONFIGURATION RECOMMANDÉE

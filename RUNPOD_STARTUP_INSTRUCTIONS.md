@@ -7,7 +7,7 @@
 Quand tu crées ton pod, dans le champ **"Docker Command"**, colle ceci:
 
 ```bash
-bash -c "apt-get update -qq && apt-get install -y git && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && bash scripts/runpod_startup.sh"
+bash -c "apt-get update -qq && apt-get install -y git && rm -rf /workspace/rag-pipeline && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && bash scripts/runpod_startup.sh"
 ```
 
 ### Avec Variables d'Environnement (Avancé)
@@ -35,7 +35,7 @@ Après avoir créé ton pod:
 ssh root@your-pod-ip -p your-port
 
 # Clone le repo
-git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline
+rm -rf /workspace/rag-pipeline && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline
 cd /workspace/rag-pipeline
 
 # Rendre le script exécutable
@@ -91,7 +91,7 @@ HF_HOME=/workspace/huggingface_cache
 
 **7. Docker Command:**
 ```bash
-bash -c "apt-get update -qq && apt-get install -y git && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
+bash -c "apt-get update -qq && apt-get install -y git && rm -rf /workspace/rag-pipeline && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
 ```
 
 **8. Deploy!**
@@ -235,7 +235,7 @@ Pour économiser:
 3. **GPU:** RTX 4090
 4. **Docker Command:**
 ```bash
-bash -c "apt-get update -qq && apt-get install -y git && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
+bash -c "apt-get update -qq && apt-get install -y git && rm -rf /workspace/rag-pipeline && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
 ```
 5. **Deploy!**
 6. Attends 2-3 minutes

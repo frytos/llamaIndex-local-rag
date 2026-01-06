@@ -1,0 +1,71 @@
+========================================
+🚀 RUNPOD STARTUP COMMAND (FIXED - NO FAIL)
+========================================
+
+✅ Cette version ne fail PAS si le dossier existe déjà
+✅ Supprime l'ancien dossier et reclone (toujours la dernière version)
+
+----------------------------------------
+Option 1: Avec GitHub Token (Repo Privé)
+----------------------------------------
+
+Dans Runpod UI:
+1. Environment Variables → Add:
+   Key: GH_TOKEN
+   Value: ghp_ton_token_ici
+
+2. Docker Command:
+
+bash -c "apt-get update -qq && apt-get install -y git && rm -rf /workspace/rag-pipeline && git clone https://\${GH_TOKEN}@github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
+
+----------------------------------------
+Option 2: Repo Public (Temporaire)
+----------------------------------------
+
+Rendre public:
+  gh repo edit llamaIndex-local-rag --visibility public
+
+Docker Command:
+
+bash -c "apt-get update -qq && apt-get install -y git && rm -rf /workspace/rag-pipeline && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
+
+Remettre privé:
+  gh repo edit llamaIndex-local-rag --visibility private
+
+----------------------------------------
+Option 3: Mode VERBOSE (Debug Complet)
+----------------------------------------
+
+Pour voir TOUS les logs d'installation:
+
+bash -c "apt-get update -qq && apt-get install -y git && rm -rf /workspace/rag-pipeline && git clone https://\${GH_TOKEN}@github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup_verbose.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup_verbose.sh"
+
+========================================
+🔑 CHANGEMENT PRINCIPAL
+========================================
+
+Ajout de: rm -rf /workspace/rag-pipeline
+
+Avant:  git clone ...
+Après:  rm -rf /workspace/rag-pipeline && git clone ...
+
+Maintenant:
+✅ Fonctionne si le dossier existe
+✅ Fonctionne si le dossier n'existe pas
+✅ Toujours la dernière version du code
+✅ Pas d'erreur "directory already exists"
+
+========================================
+📊 CE QUI SE PASSE
+========================================
+
+1. Install git
+2. Supprime /workspace/rag-pipeline (si existe)
+3. Clone le repo (toujours frais)
+4. Run le startup script
+5. Install dependencies avec logs visibles
+6. Setup PostgreSQL
+7. Download models
+8. Ready to use!
+
+========================================
