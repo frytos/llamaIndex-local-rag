@@ -137,12 +137,13 @@ if [ "${SETUP_POSTGRES:-0}" = "1" ]; then
     service postgresql start || service postgresql restart
 
     echo "  🔧 Creating database and user..."
-    sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME:-vector_db};" 2>/dev/null || echo "  ℹ️  Database exists"
-    sudo -u postgres psql -c "CREATE USER ${PGUSER:-fryt} WITH PASSWORD '${PGPASSWORD:-frytos}';" 2>/dev/null || echo "  ℹ️  User exists"
-    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME:-vector_db} TO ${PGUSER:-fryt};"
+    # Note: In Docker containers, we're already root, so use 'su' instead of 'sudo' (which isn't installed)
+    su - postgres -c "psql -c \"CREATE DATABASE ${DB_NAME:-vector_db};\"" 2>/dev/null || echo "  ℹ️  Database exists"
+    su - postgres -c "psql -c \"CREATE USER ${PGUSER:-fryt} WITH PASSWORD '${PGPASSWORD:-frytos}';\"" 2>/dev/null || echo "  ℹ️  User exists"
+    su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME:-vector_db} TO ${PGUSER:-fryt};\""
 
     echo "  🔌 Installing pgvector extension..."
-    sudo -u postgres psql -d ${DB_NAME:-vector_db} -c "CREATE EXTENSION IF NOT EXISTS vector;"
+    su - postgres -c "psql -d ${DB_NAME:-vector_db} -c 'CREATE EXTENSION IF NOT EXISTS vector;'"
 
     echo "────────────────────────────────────"
     echo "✅ PostgreSQL ready"
