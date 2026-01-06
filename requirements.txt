@@ -104,3 +104,15 @@ tzdata==2025.3
 urllib3==2.6.2
 wrapt==1.17.3
 yarl==1.22.0
+
+# Web UI
+streamlit>=1.28.0
+plotly>=5.18.0
+umap-learn>=0.5.4
+
+# MLX (Apple Silicon optimization - optional but recommended for M1/M2/M3 Macs)
+mlx>=0.20.0
+mlx-embedding-models>=0.0.11
+
+# Advanced retrieval features (optional)
+rank-bm25>=0.2.2

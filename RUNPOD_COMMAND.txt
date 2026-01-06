@@ -1,0 +1,44 @@
+========================================
+🚀 RUNPOD STARTUP COMMAND - COPY THIS
+========================================
+
+Dans Runpod UI, champ "Docker Command", colle cette ligne:
+
+bash -c "apt-get update -qq && apt-get install -y git && git clone https://github.com/frytos/llamaIndex-local-rag.git /workspace/rag-pipeline && cd /workspace/rag-pipeline && chmod +x scripts/runpod_startup.sh && SETUP_POSTGRES=1 DOWNLOAD_MODELS=1 bash scripts/runpod_startup.sh"
+
+========================================
+⚙️ CONFIGURATION RECOMMANDÉE
+========================================
+
+Template: Runpod PyTorch 2.4.0
+GPU: RTX 4090 (24GB)
+Container Disk: 50 GB
+Volume Disk: 100 GB
+Expose Ports: 5432,8000,22
+
+========================================
+🎯 CE QUE ÇA FAIT
+========================================
+
+✅ Install git
+✅ Clone ton repo
+✅ Install Python dependencies
+✅ Install PyTorch 2.4.0 + CUDA 12.4
+✅ Setup PostgreSQL (local)
+✅ Pre-download embedding model
+✅ Test GPU
+✅ Ready to run!
+
+Temps: ~2-3 minutes
+
+========================================
+📝 APRÈS LE STARTUP
+========================================
+
+Connect au pod (Web Terminal) puis:
+
+cd /workspace/rag-pipeline
+source .venv/bin/activate
+python3 rag_low_level_m1_16gb_verbose.py --query-only --query "when did I go to New York"
+
+========================================

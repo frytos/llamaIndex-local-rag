@@ -24,6 +24,7 @@ import logging
 import argparse
 import hashlib
 import json
+import re
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Iterable, Tuple
@@ -112,9 +113,72 @@ def chunked(it: List[Any], n: int) -> Iterable[List[Any]]:
 
 
 def preview(text: str, n: int = 220) -> str:
-    """Small helper to keep logs readable."""
+    """Small helper to keep logs readable.
+    Set LOG_FULL_CHUNKS=1 to disable truncation."""
+    # Check if full chunks should be displayed
+    if os.getenv("LOG_FULL_CHUNKS", "0") == "1":
+        return (text or "").strip()
+
     t = (text or "").replace("\n", " ").strip()
     return (t[:n] + "…") if len(t) > n else t
+
+
+def colorize_participants(text: str) -> str:
+    """
+    Colorize participant names in chat logs for better readability.
+    Detects patterns like [date time] Name: message and assigns colors.
+    Set COLORIZE_CHUNKS=1 to enable.
+    """
+    if os.getenv("COLORIZE_CHUNKS", "0") != "1":
+        return text
+
+    import re
+
+    # ANSI color codes
+    COLORS = [
+        '\033[91m',  # Red
+        '\033[92m',  # Green
+        '\033[93m',  # Yellow
+        '\033[94m',  # Blue
+        '\033[95m',  # Magenta
+        '\033[96m',  # Cyan
+        '\033[97m',  # White
+        '\033[31m',  # Dark Red
+        '\033[32m',  # Dark Green
+        '\033[33m',  # Dark Yellow
+        '\033[34m',  # Dark Blue
+        '\033[35m',  # Dark Magenta
+        '\033[36m',  # Dark Cyan
+    ]
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+
+    # Find all participant names in pattern: [date time] Name:
+    # Match patterns like [2022-10-13 13:22] EB: or [2024-06-18 23:40] Arnaud Grd:
+    pattern = r'\[[\d\-]+ [\d:]+\]\s+([^:]+):'
+    matches = re.findall(pattern, text)
+
+    if not matches:
+        return text
+
+    # Get unique participants and assign colors
+    participants = list(set(matches))
+    participant_colors = {}
+    for i, participant in enumerate(sorted(participants)):
+        participant_colors[participant] = COLORS[i % len(COLORS)]
+
+    # Colorize each participant name in the text
+    colored_text = text
+    for participant, color in participant_colors.items():
+        # Use word boundaries to avoid partial matches
+        # Replace "Name:" with colored version
+        colored_text = re.sub(
+            rf'(\[[\d\-]+ [\d:]+\]\s+)({re.escape(participant)})(:)',
+            rf'\1{BOLD}{color}\2{RESET}\3',
+            colored_text
+        )
+
+    return colored_text
 
 
 def compute_file_hash(file_path: str) -> str:
@@ -124,6 +188,110 @@ def compute_file_hash(file_path: str) -> str:
         for chunk in iter(lambda: f.read(8192), b""):
             sha256.update(chunk)
     return sha256.hexdigest()
+
+
+def extract_chat_metadata(text: str) -> dict:
+    """
+    Extract metadata from chat log messages.
+    Detects patterns like: [2022-10-13 13:22] Name: message
+
+    Returns dict with:
+        - participants: List of unique participant names
+        - dates: List of dates mentioned
+        - date_range: Tuple of (earliest, latest) dates
+        - message_count: Number of messages in chunk
+    """
+    import re
+    from datetime import datetime
+
+    # Pattern: [YYYY-MM-DD HH:MM] Name: message
+    pattern = r'\[(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\]\s+([^:]+):'
+    matches = re.findall(pattern, text)
+
+    if not matches:
+        return {}
+
+    participants = []
+    dates = []
+
+    for date_str, time_str, participant in matches:
+        participants.append(participant.strip())
+        dates.append(date_str)
+
+    # Get unique values
+    unique_participants = list(set(participants))
+    unique_dates = sorted(set(dates))
+
+    metadata = {
+        "participants": unique_participants,
+        "participant_count": len(unique_participants),
+        "message_count": len(matches),
+        "is_chat_log": True,
+    }
+
+    # Add date range if dates found
+    if unique_dates:
+        metadata["dates"] = unique_dates
+        metadata["earliest_date"] = unique_dates[0]
+        metadata["latest_date"] = unique_dates[-1]
+        metadata["date_range"] = f"{unique_dates[0]} to {unique_dates[-1]}"
+
+    # Add dominant participant (most messages in chunk)
+    if participants:
+        from collections import Counter
+        participant_counts = Counter(participants)
+        dominant = participant_counts.most_common(1)[0]
+        metadata["dominant_participant"] = dominant[0]
+        metadata["dominant_participant_count"] = dominant[1]
+
+    return metadata
+
+
+def clean_html_content(html: str) -> str:
+    """
+    Clean HTML content for better embedding quality.
+    Extracts text, removes scripts/styles, normalizes whitespace.
+    """
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        # Fallback: basic regex cleaning if BeautifulSoup not available
+        import re
+        # Remove script and style blocks
+        text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        # Remove HTML tags
+        text = re.sub(r'<[^>]+>', ' ', text)
+        # Decode HTML entities
+        import html as html_module
+        text = html_module.unescape(text)
+        # Normalize whitespace
+        text = ' '.join(text.split())
+        return text
+
+    # Use BeautifulSoup for better parsing
+    soup = BeautifulSoup(html, 'html.parser')
+
+    # Remove unwanted elements
+    for element in soup(['script', 'style', 'head', 'meta', 'link', 'noscript']):
+        element.decompose()
+
+    # Extract text with newlines preserved for structure
+    text = soup.get_text(separator='\n')
+
+    # Clean up whitespace while preserving paragraph structure
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line:  # Skip empty lines
+            # Collapse multiple spaces within a line
+            line = ' '.join(line.split())
+            lines.append(line)
+
+    # Join with single newlines, collapse multiple blank lines
+    text = '\n'.join(lines)
+
+    return text
 
 
 def parse_args() -> argparse.Namespace:
@@ -160,6 +328,12 @@ Environment Variables:
     )
 
     parser.add_argument(
+        "--index-only",
+        action="store_true",
+        help="Only index documents, skip querying (useful for batch indexing)"
+    )
+
+    parser.add_argument(
         "--interactive",
         "-i",
         action="store_true",
@@ -190,6 +364,123 @@ Environment Variables:
 
 
 # -----------------------
+# Table Name Generation
+# -----------------------
+def sanitize_name(name: str, max_length: int = 30) -> str:
+    """
+    Sanitize a filename/folder for use in table names.
+
+    Args:
+        name: Original filename or folder name
+        max_length: Maximum length for sanitized name
+
+    Returns:
+        Sanitized name safe for PostgreSQL table names
+    """
+    # Remove file extension
+    name = Path(name).stem
+
+    # Replace problematic characters with underscores
+    name = name.replace('-', '_').replace(' ', '_').replace('.', '_')
+
+    # Remove any remaining non-alphanumeric characters except underscores
+    name = re.sub(r'[^a-zA-Z0-9_]', '', name)
+
+    # Ensure it starts with a letter (PostgreSQL requirement)
+    if name and not name[0].isalpha():
+        name = 'doc_' + name
+
+    # Truncate to max length
+    if len(name) > max_length:
+        name = name[:max_length]
+
+    return name.lower()
+
+
+def extract_model_short_name(model_name: str) -> str:
+    """
+    Extract a short, readable name from embedding model path.
+
+    Examples:
+        "BAAI/bge-small-en" -> "bge"
+        "sentence-transformers/all-MiniLM-L6-v2" -> "minilm"
+        "intfloat/multilingual-e5-small" -> "e5"
+
+    Args:
+        model_name: Full model name/path
+
+    Returns:
+        Short model identifier
+    """
+    # Extract the last part after /
+    name = model_name.split('/')[-1]
+
+    # Common patterns
+    if 'bge' in name.lower():
+        return 'bge'
+    elif 'minilm' in name.lower():
+        return 'minilm'
+    elif 'e5' in name.lower():
+        return 'e5'
+    elif 'mpnet' in name.lower():
+        return 'mpnet'
+    elif 'roberta' in name.lower():
+        return 'roberta'
+    elif 'bert' in name.lower():
+        return 'bert'
+    else:
+        # Take first meaningful word (remove common prefixes)
+        parts = name.lower().replace('sentence-', '').replace('all-', '').split('-')
+        return parts[0][:8]
+
+
+def generate_table_name(
+    pdf_path: str,
+    chunk_size: int,
+    chunk_overlap: int,
+    embed_model: str
+) -> str:
+    """
+    Generate a descriptive table name from configuration.
+
+    Format: {file/folder}_cs{chunk_size}_ov{overlap}_{model}_{YYMMDD}
+
+    Args:
+        pdf_path: Path to document or folder
+        chunk_size: Chunk size parameter
+        chunk_overlap: Chunk overlap parameter
+        embed_model: Embedding model name
+
+    Returns:
+        Generated table name
+
+    Examples:
+        generate_table_name("data/inbox_clean", 700, 150, "BAAI/bge-small-en")
+        -> "inbox_clean_cs700_ov150_bge_251219"
+
+        generate_table_name("data/report.pdf", 500, 100, "intfloat/e5-small")
+        -> "report_cs500_ov100_e5_251219"
+    """
+    # Extract and sanitize document name
+    path = Path(pdf_path)
+    if path.is_dir():
+        doc_name = sanitize_name(path.name)
+    else:
+        doc_name = sanitize_name(path.stem)
+
+    # Extract short model name
+    model_short = extract_model_short_name(embed_model)
+
+    # Get date in YYMMDD format
+    date_str = datetime.now().strftime("%y%m%d")
+
+    # Construct table name
+    table_name = f"{doc_name}_cs{chunk_size}_ov{chunk_overlap}_{model_short}_{date_str}"
+
+    return table_name
+
+
+# -----------------------
 # Configuration (all overrideable via env vars)
 # -----------------------
 @dataclass
@@ -200,7 +491,7 @@ class Settings:
     port: str = os.getenv("PGPORT", "5432")
     user: str = os.getenv("PGUSER", "fryt")
     password: str = os.getenv("PGPASSWORD", "frytos")
-    table: str = os.getenv("PGTABLE", "llama2_paper")
+    table: str = ""  # Will be auto-generated if not set via PGTABLE
 
     # Input
     pdf_path: str = os.getenv("PDF_PATH", "data/llama2.pdf")
@@ -218,10 +509,21 @@ class Settings:
     # Retrieval knobs
     top_k: int = int(os.getenv("TOP_K", "4"))
 
+    # Advanced retrieval features
+    # HYBRID_ALPHA: 0.0=pure BM25, 0.5=balanced, 1.0=pure vector (default)
+    hybrid_alpha: float = float(os.getenv("HYBRID_ALPHA", "1.0"))
+    # ENABLE_FILTERS: Enable metadata-based filtering (participant, date)
+    enable_filters: bool = os.getenv("ENABLE_FILTERS", "1") == "1"
+    # MMR_THRESHOLD: Enable MMR diversity (0=disabled, 0.5=balanced, 1.0=max relevance)
+    mmr_threshold: float = float(os.getenv("MMR_THRESHOLD", "0.0"))
+
     # Embeddings knobs
     embed_model_name: str = os.getenv("EMBED_MODEL", "BAAI/bge-small-en")
     embed_dim: int = int(os.getenv("EMBED_DIM", "384"))
-    embed_batch: int = int(os.getenv("EMBED_BATCH", "16"))
+    # Increased default batch size for better throughput (MLX: 64-128, HuggingFace: 32)
+    embed_batch: int = int(os.getenv("EMBED_BATCH", "32"))  # Was: 16
+    # EMBED_BACKEND: huggingface (default) | mlx (Apple Silicon optimized, 5-20x faster)
+    embed_backend: str = os.getenv("EMBED_BACKEND", "huggingface")
 
     # LLM knobs (llama.cpp)
     # Default: Mistral 7B Instruct GGUF Q4_K_M (good for 16GB M1)
@@ -256,20 +558,26 @@ class Settings:
         """
         errors = []
 
-        # Validate PDF path
-        pdf_file = Path(self.pdf_path)
-        if not pdf_file.exists():
+        # Validate document path (file or folder)
+        doc_path = Path(self.pdf_path)
+        supported_extensions = {
+            ".pdf", ".docx", ".pptx",
+            ".txt", ".md", ".html", ".htm", ".json", ".csv", ".xml", ".xsl",
+            ".py", ".js", ".ts", ".jsx", ".tsx", ".cpp", ".c", ".h", ".hpp",
+            ".java", ".rb", ".go", ".rs", ".php", ".m", ".swift", ".kt",
+            ".sh", ".bash", ".zsh", ".yaml", ".yml", ".toml", ".ini", ".cfg",
+            ".sql", ".r", ".scala", ".pl", ".lua", ".ex", ".exs", ".clj",
+        }
+        if not doc_path.exists():
             errors.append(
-                f"PDF file not found: {self.pdf_path}\n"
-                f"  Fix: Set PDF_PATH environment variable to an existing PDF file"
+                f"Document path not found: {self.pdf_path}\n"
+                f"  Fix: Set PDF_PATH environment variable to an existing file or folder"
             )
-        elif not pdf_file.is_file():
-            errors.append(f"PDF path is not a file: {self.pdf_path}")
-        elif pdf_file.suffix.lower() != ".pdf":
+        elif doc_path.is_file() and doc_path.suffix.lower() not in supported_extensions:
             errors.append(
-                f"File is not a PDF: {self.pdf_path}\n"
-                f"  Current extension: {pdf_file.suffix}\n"
-                f"  This script currently only supports PDF files"
+                f"Unsupported file format: {self.pdf_path}\n"
+                f"  Extension: {doc_path.suffix}\n"
+                f"  Supported: .pdf, .docx, .pptx, .html, .json, .txt, .md, .py, .cpp, etc."
             )
 
         # Validate chunk settings
@@ -340,6 +648,19 @@ class Settings:
 
 
 S = Settings()
+
+# Auto-generate table name if PGTABLE was not explicitly set
+if not os.getenv("PGTABLE"):
+    S.table = generate_table_name(
+        S.pdf_path,
+        S.chunk_size,
+        S.chunk_overlap,
+        S.embed_model_name
+    )
+    log.debug(f"Auto-generated table name: {S.table}")
+else:
+    S.table = os.getenv("PGTABLE")
+
 # Validation will be called in main() after CLI args are parsed
 
 
@@ -717,6 +1038,447 @@ def save_query_log(
 # -----------------------
 # Retriever with verbose logs (this is where you "see retrieval")
 # -----------------------
+
+class HybridRetriever(BaseRetriever):
+    """
+    Hybrid retriever that combines:
+    1. BM25 (keyword-based sparse retrieval)
+    2. Vector similarity (semantic dense retrieval)
+
+    Controlled by HYBRID_ALPHA:
+    - 0.0 = pure BM25 (keyword only)
+    - 0.5 = balanced hybrid
+    - 1.0 = pure vector (semantic only, default)
+    """
+
+    def __init__(
+        self,
+        vector_store: PGVectorStore,
+        embed_model: Any,
+        similarity_top_k: int,
+        alpha: float = 1.0,
+        enable_metadata_filter: bool = False,
+        mmr_threshold: float = 0.0
+    ):
+        self._vector_store = vector_store
+        self._embed_model = embed_model
+        self._similarity_top_k = similarity_top_k
+        self._alpha = alpha  # Weight for vector vs BM25 (0=BM25, 1=vector)
+        self._enable_metadata_filter = enable_metadata_filter
+        self._mmr_threshold = mmr_threshold  # 0=disabled, >0=enable MMR diversity
+        self.last_retrieval_time = 0.0
+
+        # BM25 components (initialized on first retrieval)
+        self._bm25 = None
+        self._all_nodes = None
+        self._tokenized_corpus = None
+
+        super().__init__()
+
+    def _init_bm25(self):
+        """Initialize BM25 index by loading all documents from vector store."""
+        if self._bm25 is not None:
+            return  # Already initialized
+
+        log.info("  🔧 Initializing BM25 index for hybrid search...")
+        t = now_ms()
+
+        try:
+            # Try to import rank_bm25
+            from rank_bm25 import BM25Okapi
+        except ImportError:
+            log.warning("  ⚠️  rank-bm25 not installed. Install with: pip install rank-bm25")
+            log.warning("  ⚠️  Falling back to pure vector search")
+            self._alpha = 1.0  # Force pure vector mode
+            return
+
+        # Query all nodes from vector store
+        # Note: This loads all documents into memory for BM25
+        vsq = VectorStoreQuery(
+            query_embedding=None,
+            similarity_top_k=10000,  # Get many documents for BM25 corpus
+            mode="default"
+        )
+
+        # Create a dummy embedding to query all docs
+        # Get dimension in a way that works for both HuggingFace and MLX
+        try:
+            # Try HuggingFace way
+            embed_dim = self._embed_model._model.get_sentence_embedding_dimension()
+        except (AttributeError, TypeError):
+            # Fallback: use a small test embedding to get dimension
+            test_emb = self._embed_model.get_text_embedding("test")
+            embed_dim = len(test_emb)
+
+        dummy_emb = [0.0] * embed_dim
+        vsq.query_embedding = dummy_emb
+
+        try:
+            res = self._vector_store.query(vsq)
+            self._all_nodes = res.nodes
+            log.info(f"  ✓ Loaded {len(self._all_nodes)} documents for BM25 corpus")
+        except Exception as e:
+            log.warning(f"  ⚠️  Failed to load corpus for BM25: {e}")
+            log.warning("  ⚠️  Falling back to pure vector search")
+            self._alpha = 1.0
+            return
+
+        # Tokenize corpus for BM25
+        self._tokenized_corpus = [doc.get_content().lower().split() for doc in self._all_nodes]
+        self._bm25 = BM25Okapi(self._tokenized_corpus)
+
+        log.info(f"  ✓ BM25 index initialized in {dur_s(t):.2f}s")
+
+    def _retrieve(self, query_bundle: QueryBundle) -> List[NodeWithScore]:
+        q = query_bundle.query_str
+        retrieval_start = now_ms()
+
+        log.info(f"\n{'='*70}")
+        if self._alpha == 1.0:
+            log.info(f"STEP 4: RETRIEVAL - Pure vector similarity search")
+        elif self._alpha == 0.0:
+            log.info(f"STEP 4: RETRIEVAL - Pure BM25 keyword search")
+        else:
+            log.info(f"STEP 4: HYBRID RETRIEVAL - Combining BM25 + Vector (α={self._alpha})")
+        log.info(f"{'='*70}")
+        log.info(f"❓ Query: \"{q}\"")
+
+        # Parse metadata filters from query if enabled
+        metadata_filters = {}
+        filtered_query = q
+
+        if self._enable_metadata_filter:
+            metadata_filters, filtered_query = self._parse_metadata_filters(q)
+            if metadata_filters:
+                log.info(f"\n🔍 Metadata filters detected:")
+                for key, value in metadata_filters.items():
+                    log.info(f"  • {key}: {value}")
+                log.info(f"  • Filtered query: \"{filtered_query}\"")
+
+        # Vector similarity retrieval
+        vector_results = []
+        if self._alpha > 0:
+            log.info(f"\n💡 Vector similarity search (weight={self._alpha:.1f}):")
+            t0 = now_ms()
+            q_emb = self._embed_model.get_query_embedding(filtered_query)
+            log.info(f"  • Query embedding computed in {dur_s(t0):.2f}s")
+
+            vsq = VectorStoreQuery(
+                query_embedding=q_emb,
+                similarity_top_k=self._similarity_top_k * 2,  # Get more candidates for filtering
+                mode="default",
+            )
+            res = self._vector_store.query(vsq)
+            vector_results = [(node, score) for node, score in zip(res.nodes, res.similarities or [])]
+            log.info(f"  • Retrieved {len(vector_results)} candidates")
+
+        # BM25 keyword retrieval
+        bm25_results = []
+        if self._alpha < 1.0:
+            log.info(f"\n💡 BM25 keyword search (weight={1-self._alpha:.1f}):")
+            self._init_bm25()
+
+            if self._bm25 is not None:
+                t1 = now_ms()
+                tokenized_query = filtered_query.lower().split()
+                bm25_scores = self._bm25.get_scores(tokenized_query)
+
+                # Get top-k by BM25 score
+                import numpy as np
+                top_indices = np.argsort(bm25_scores)[::-1][:self._similarity_top_k * 2]
+
+                for idx in top_indices:
+                    if idx < len(self._all_nodes):
+                        bm25_results.append((self._all_nodes[idx], bm25_scores[idx]))
+
+                log.info(f"  • Retrieved {len(bm25_results)} candidates in {dur_s(t1):.2f}s")
+
+        # Combine results with hybrid scoring
+        log.info(f"\n🔀 Combining results:")
+        combined = self._combine_results(vector_results, bm25_results, self._alpha)
+
+        # Apply metadata filtering if enabled
+        if metadata_filters:
+            before_filter_count = len(combined)
+            combined = self._apply_metadata_filters(combined, metadata_filters)
+            log.info(f"  • Before filtering: {before_filter_count} candidates")
+            log.info(f"  • After filtering: {len(combined)} results")
+
+            if len(combined) == 0 and before_filter_count > 0:
+                log.warning(f"  ⚠️  All results filtered out! Check filter criteria:")
+                log.warning(f"     Filters: {metadata_filters}")
+                # Show sample metadata from first few candidates for debugging
+                sample_nodes = [node for node, _ in combined[:3]] if combined else [node for node, _ in [(n, s) for n, s in zip(vector_results[:3] if vector_results else [], [0]*3)]]
+                if not sample_nodes and vector_results:
+                    sample_nodes = [node for node, _ in vector_results[:3]]
+                for node, _ in (vector_results[:3] if vector_results else []):
+                    md = node.metadata or {}
+                    if md.get('is_chat_log'):
+                        log.warning(f"     Sample metadata: participants={md.get('participants', [])}, dates={md.get('earliest_date', '?')}-{md.get('latest_date', '?')}")
+                        break
+
+        # Apply MMR for diversity if enabled
+        if self._mmr_threshold > 0 and len(combined) > self._similarity_top_k:
+            log.info(f"\n🎲 Applying MMR (Maximal Marginal Relevance) for diversity:")
+            log.info(f"  • Lambda: {self._mmr_threshold:.2f} (0=max diversity, 1=max relevance)")
+            combined = self._apply_mmr(combined, self._similarity_top_k, self._mmr_threshold)
+            log.info(f"  • Selected {len(combined)} diverse results")
+        else:
+            # Take top-k
+            combined = combined[:self._similarity_top_k]
+
+        # Calculate quality metrics
+        scores = [score for _, score in combined if score is not None]
+        if scores:
+            log.info(f"\n📊 Retrieval Quality Metrics:")
+            log.info(f"  • Best match score: {max(scores):.4f}")
+            log.info(f"  • Worst match score: {min(scores):.4f}")
+            log.info(f"  • Average score: {sum(scores)/len(scores):.4f}")
+
+        # Log retrieved chunks
+        log.info(f"\n📄 Retrieved Chunks (top {len(combined)}):")
+        out = []
+        for i, (node, score) in enumerate(combined, start=1):
+            md = node.metadata or {}
+            score_str = f"{score:.4f}" if score is not None else "None"
+            page = md.get("page_label") or md.get("page") or md.get("source") or "?"
+
+            # Show chat metadata if available
+            chat_info = ""
+            if md.get("is_chat_log"):
+                participants = md.get("participants", [])
+                date_range = md.get("date_range", "")
+                if participants:
+                    chat_info = f" | Participants: {', '.join(participants[:2])}"
+                if date_range:
+                    chat_info += f" | {date_range}"
+
+            log.info(f"\n  {i}. Score: {score_str} | Source: {page}{chat_info}")
+            chunk_text = preview(node.get_content(), 200)
+            colored_text = colorize_participants(chunk_text)
+            log.info(f"     Text: \"{colored_text}\"")
+
+            nws = NodeWithScore(node=node, score=score)
+            out.append(nws)
+
+        self.last_retrieval_time = dur_s(retrieval_start)
+        return out
+
+    def _combine_results(
+        self,
+        vector_results: List[Tuple[Any, float]],
+        bm25_results: List[Tuple[Any, float]],
+        alpha: float
+    ) -> List[Tuple[Any, float]]:
+        """Combine vector and BM25 results with weighted scoring."""
+        from collections import defaultdict
+
+        # Normalize scores to [0, 1]
+        def normalize_scores(results):
+            if not results:
+                return {}
+            scores = [score for _, score in results]
+            min_score = min(scores)
+            max_score = max(scores)
+            range_score = max_score - min_score if max_score > min_score else 1.0
+
+            normalized = {}
+            for node, score in results:
+                node_id = node.node_id if hasattr(node, 'node_id') else id(node)
+                normalized[node_id] = (node, (score - min_score) / range_score)
+            return normalized
+
+        vector_norm = normalize_scores(vector_results)
+        bm25_norm = normalize_scores(bm25_results)
+
+        # Combine scores
+        all_node_ids = set(vector_norm.keys()) | set(bm25_norm.keys())
+        combined = []
+
+        for node_id in all_node_ids:
+            node = None
+            vector_score = 0.0
+            bm25_score = 0.0
+
+            if node_id in vector_norm:
+                node, vector_score = vector_norm[node_id]
+            if node_id in bm25_norm:
+                node, bm25_score = bm25_norm[node_id]
+
+            # Weighted combination
+            hybrid_score = alpha * vector_score + (1 - alpha) * bm25_score
+            combined.append((node, hybrid_score))
+
+        # Sort by hybrid score
+        combined.sort(key=lambda x: x[1], reverse=True)
+        return combined
+
+    def _parse_metadata_filters(self, query: str) -> Tuple[dict, str]:
+        """
+        Parse metadata filters from query.
+        Supports: participant:Name, date:YYYY-MM-DD, after:YYYY-MM-DD, before:YYYY-MM-DD
+        """
+        import re
+
+        filters = {}
+        filtered_query = query
+
+        # Extract participant filter: participant:Name or from:Name
+        participant_pattern = r'(?:participant|from):([^\s]+)'
+        participant_match = re.search(participant_pattern, query, re.IGNORECASE)
+        if participant_match:
+            filters['participant'] = participant_match.group(1)
+            filtered_query = re.sub(participant_pattern, '', filtered_query, flags=re.IGNORECASE)
+
+        # Extract date filters
+        date_pattern = r'(?:after|since):(\d{4}-\d{2}-\d{2})'
+        date_match = re.search(date_pattern, query, re.IGNORECASE)
+        if date_match:
+            filters['after'] = date_match.group(1)
+            filtered_query = re.sub(date_pattern, '', filtered_query, flags=re.IGNORECASE)
+
+        before_pattern = r'before:(\d{4}-\d{2}-\d{2})'
+        before_match = re.search(before_pattern, query, re.IGNORECASE)
+        if before_match:
+            filters['before'] = before_match.group(1)
+            filtered_query = re.sub(before_pattern, '', filtered_query, flags=re.IGNORECASE)
+
+        # Clean up extra whitespace
+        filtered_query = ' '.join(filtered_query.split())
+
+        return filters, filtered_query
+
+    def _apply_metadata_filters(
+        self,
+        results: List[Tuple[Any, float]],
+        filters: dict
+    ) -> List[Tuple[Any, float]]:
+        """Filter results based on metadata."""
+        filtered = []
+
+        for node, score in results:
+            md = node.metadata or {}
+
+            # Check participant filter (fuzzy matching)
+            if 'participant' in filters:
+                participants = md.get('participants', [])
+                filter_name = filters['participant'].lower()
+
+                # Check if filter matches any participant (case-insensitive, substring match)
+                matched = False
+                for p in participants:
+                    if filter_name in p.lower() or p.lower() in filter_name:
+                        matched = True
+                        break
+
+                if not matched:
+                    continue
+
+            # Check date filters
+            if 'after' in filters:
+                latest_date = md.get('latest_date', '')
+                if not latest_date or latest_date < filters['after']:
+                    continue
+
+            if 'before' in filters:
+                earliest_date = md.get('earliest_date', '')
+                if not earliest_date or earliest_date > filters['before']:
+                    continue
+
+            filtered.append((node, score))
+
+        return filtered
+
+    def _apply_mmr(
+        self,
+        results: List[Tuple[Any, float]],
+        k: int,
+        lambda_param: float
+    ) -> List[Tuple[Any, float]]:
+        """
+        Apply Maximal Marginal Relevance for diversity.
+
+        MMR balances relevance and diversity:
+        - Select documents that are relevant to query
+        - But also diverse from already-selected documents
+
+        Args:
+            results: List of (node, score) tuples sorted by relevance
+            k: Number of results to return
+            lambda_param: Trade-off between relevance and diversity
+                         0.0 = max diversity, 1.0 = max relevance
+
+        Returns:
+            List of k diverse (node, score) tuples
+        """
+        if len(results) <= k:
+            return results[:k]
+
+        # Extract embeddings for all candidate nodes
+        try:
+            import numpy as np
+
+            nodes = [node for node, _ in results]
+            scores = [score for _, score in results]
+
+            # Get embeddings (they're already stored in nodes from indexing)
+            embeddings = []
+            for node in nodes:
+                if hasattr(node, 'embedding') and node.embedding is not None:
+                    embeddings.append(node.embedding)
+                else:
+                    # Fallback: compute embedding on-the-fly
+                    text = node.get_content()
+                    emb = self._embed_model.get_text_embedding(text)
+                    embeddings.append(emb)
+
+            embeddings = np.array(embeddings)
+
+            # Normalize embeddings for cosine similarity
+            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+            embeddings = embeddings / (norms + 1e-10)
+
+            # MMR algorithm
+            selected_indices = []
+            remaining_indices = list(range(len(nodes)))
+
+            # Start with the most relevant document
+            selected_indices.append(0)
+            remaining_indices.remove(0)
+
+            # Iteratively select diverse documents
+            for _ in range(k - 1):
+                if not remaining_indices:
+                    break
+
+                mmr_scores = []
+                selected_embs = embeddings[selected_indices]
+
+                for idx in remaining_indices:
+                    candidate_emb = embeddings[idx]
+                    relevance_score = scores[idx]
+
+                    # Calculate max similarity to already-selected documents
+                    similarities = np.dot(selected_embs, candidate_emb)
+                    max_similarity = np.max(similarities) if len(similarities) > 0 else 0.0
+
+                    # MMR score: balance relevance and diversity
+                    mmr_score = lambda_param * relevance_score - (1 - lambda_param) * max_similarity
+                    mmr_scores.append((idx, mmr_score))
+
+                # Select document with highest MMR score
+                best_idx, _ = max(mmr_scores, key=lambda x: x[1])
+                selected_indices.append(best_idx)
+                remaining_indices.remove(best_idx)
+
+            # Return selected documents with their scores
+            return [(nodes[idx], scores[idx]) for idx in selected_indices]
+
+        except Exception as e:
+            log.warning(f"  ⚠️  MMR failed: {e}. Falling back to top-k selection")
+            return results[:k]
+
+
 class VectorDBRetriever(BaseRetriever):
     """
     A retriever is "query -> relevant nodes".
@@ -815,7 +1577,9 @@ class VectorDBRetriever(BaseRetriever):
                 config_info = f" [cs={chunk_size}, ov={chunk_overlap}]"
 
             log.info(f"\n  {i}. Similarity: {score_str} | Source: {page}{config_info}")
-            log.info(f"     Text: \"{preview(nws.node.get_content(), 200)}\"")
+            chunk_text = preview(nws.node.get_content(), 200)
+            colored_text = colorize_participants(chunk_text)
+            log.info(f"     Text: \"{colored_text}\"")
 
         # Warn if mixed configurations detected in retrieval
         if len(chunk_configs_seen) > 1:
@@ -832,14 +1596,55 @@ class VectorDBRetriever(BaseRetriever):
 # -----------------------
 # Main pipeline
 # -----------------------
-def build_embed_model() -> HuggingFaceEmbedding:
+def build_embed_model():
     """
-    Embeddings transform text -> vector.
-    This is what makes vector search possible.
+    Build embedding model with backend selection.
+
+    EMBED_BACKEND options:
+    - huggingface (default): PyTorch + MPS/CUDA/CPU
+    - mlx: Apple Silicon optimized (5-20x faster on M1/M2/M3)
+
+    Embeddings transform text -> vector for semantic search.
     """
+    backend = S.embed_backend.lower()
+
+    # Try MLX backend first if requested
+    if backend == "mlx":
+        try:
+            from mlx_embedding import MLXEmbedding
+            log.info(f"Embedding backend: MLX (Apple Silicon Metal GPU)")
+            log.info(f"Embedding model: {S.embed_model_name} (dim={S.embed_dim})")
+            t = now_ms()
+            model = MLXEmbedding(model_name=S.embed_model_name)
+            log.info(f"MLX model loaded in {dur_s(t):.2f}s")
+            log.info(f"  ⚡ Expected speedup: 5-20x vs PyTorch")
+            log.info(f"  💡 Tip: Increase EMBED_BATCH to 64-128 for best performance")
+            return model
+        except ImportError as e:
+            log.warning(f"MLX not available: {e}")
+            log.warning("  Install with: pip install mlx mlx-embedding-models")
+            log.warning("  Falling back to HuggingFace backend")
+            # Fall through to HuggingFace
+        except Exception as e:
+            log.error(f"MLX initialization failed: {e}")
+            log.warning("  Falling back to HuggingFace backend")
+            # Fall through to HuggingFace
+
+    # HuggingFace backend (default)
+    import torch
+    if torch.backends.mps.is_available():
+        device = "mps"  # Apple Metal GPU
+        log.info(f"Embedding backend: HuggingFace with MPS (Apple Metal GPU)")
+    elif torch.cuda.is_available():
+        device = "cuda"
+        log.info(f"Embedding backend: HuggingFace with CUDA GPU")
+    else:
+        device = "cpu"
+        log.info(f"Embedding backend: HuggingFace with CPU")
+
     log.info(f"Embedding model: {S.embed_model_name} (expected dim={S.embed_dim})")
     t = now_ms()
-    model = HuggingFaceEmbedding(model_name=S.embed_model_name)
+    model = HuggingFaceEmbedding(model_name=S.embed_model_name, device=device)
     log.info(f"Embedding model loaded in {dur_s(t):.2f}s")
     return model
 
@@ -871,7 +1676,7 @@ def build_llm() -> LlamaCPP:
 
 def load_documents(doc_path: str) -> List[Any]:
     """
-    Load documents from various formats (PDF, DOCX, TXT, MD).
+    Load documents from various formats (PDF, DOCX, TXT, MD) or from a folder.
     Returns LlamaIndex Documents.
     """
     path = Path(doc_path)
@@ -883,78 +1688,176 @@ def load_documents(doc_path: str) -> List[Any]:
             f"  Example: PDF_PATH=/path/to/your/document.pdf python {sys.argv[0]}"
         )
 
-    ext = path.suffix.lower()
-    file_size_mb = path.stat().st_size / (1024 * 1024)
-
-    log.info(f"Loading document: {doc_path}")
-    log.info(f"  Format: {ext}, Size: {file_size_mb:.1f} MB")
-
     t = now_ms()
     docs = []
 
-    try:
-        if ext == ".pdf":
-            # PDF: Use PyMuPDFReader (page-per-document)
-            docs = PyMuPDFReader().load(file_path=str(path))
+    # Supported text-based extensions (loaded as plain text)
+    text_extensions = {
+        ".txt", ".md", ".html", ".htm", ".json", ".csv", ".xml", ".xsl",
+        ".py", ".js", ".ts", ".jsx", ".tsx", ".cpp", ".c", ".h", ".hpp",
+        ".java", ".rb", ".go", ".rs", ".php", ".m", ".swift", ".kt",
+        ".sh", ".bash", ".zsh", ".yaml", ".yml", ".toml", ".ini", ".cfg",
+        ".sql", ".r", ".scala", ".pl", ".lua", ".ex", ".exs", ".clj",
+    }
 
-        elif ext == ".docx":
-            # DOCX: Load as single document
-            try:
-                from docx import Document as DocxDocument
-            except ImportError:
-                raise ImportError(
-                    "python-docx not installed. Install with: pip install python-docx"
-                )
+    # Handle directory (folder of documents)
+    if path.is_dir():
+        log.info(f"Loading documents from folder: {doc_path}")
 
-            docx_doc = DocxDocument(str(path))
-            text = "\n".join([p.text for p in docx_doc.paragraphs])
-
-            from llama_index.core.schema import Document
-            docs = [Document(text=text, metadata={"source": str(path), "format": "docx"})]
-
-        elif ext in (".txt", ".md"):
-            # TXT/MD: Load as single document
-            text = path.read_text(encoding="utf-8", errors="replace")
-
-            from llama_index.core.schema import Document
-            docs = [Document(text=text, metadata={"source": str(path), "format": ext[1:]})]
-
-        else:
-            raise ValueError(
-                f"Unsupported file format: {ext}\n"
-                f"  Supported formats: .pdf, .docx, .txt, .md\n"
-                f"  File: {doc_path}"
+        try:
+            from llama_index.core import SimpleDirectoryReader
+        except ImportError:
+            raise ImportError(
+                "SimpleDirectoryReader not available. Update llama-index: pip install -U llama-index"
             )
 
-    except Exception as e:
-        if isinstance(e, (FileNotFoundError, ValueError, ImportError)):
-            raise
-        raise RuntimeError(
-            f"Failed to load document: {doc_path}\n"
-            f"  Error: {type(e).__name__}: {e}\n"
-            f"  Fix: Ensure the file is valid and not corrupted"
+        # Count files first
+        supported_extensions = [".pdf", ".docx", ".pptx"] + list(text_extensions)
+        file_count = sum(1 for f in path.rglob("*") if f.is_file() and f.suffix.lower() in supported_extensions)
+
+        if file_count == 0:
+            raise ValueError(
+                f"No supported documents found in folder: {doc_path}\n"
+                f"  Supported formats: {', '.join(supported_extensions)}"
+            )
+
+        log.info(f"  Found {file_count} supported file(s)")
+
+        # Load all documents recursively
+        reader = SimpleDirectoryReader(
+            input_dir=str(path),
+            recursive=True,
+            required_exts=supported_extensions,
         )
+        docs = reader.load_data()
 
-    if not docs:
-        raise ValueError(
-            f"Document loaded but contains no content: {doc_path}\n"
-            f"  The document may be empty or corrupted"
-        )
+        # Clean HTML documents
+        html_count = 0
+        for doc in docs:
+            source = doc.metadata.get("file_path", "") or doc.metadata.get("source", "")
+            if source.lower().endswith((".html", ".htm")):
+                cleaned_text = clean_html_content(doc.text)
+                doc.set_content(cleaned_text)
+                html_count += 1
 
-    # Calculate total text statistics
-    total_chars = sum(len(doc.text) for doc in docs)
-    total_words = sum(len(doc.text.split()) for doc in docs)
-    avg_chars_per_doc = total_chars / len(docs) if docs else 0
+        if html_count > 0:
+            log.info(f"  🧹 Cleaned {html_count} HTML file(s) (removed tags/scripts/styles)")
 
-    log.info(f"✓ Loaded {len(docs)} document(s) in {dur_s(t):.2f}s")
-    log.info(f"  📊 Statistics:")
-    log.info(f"    • Total characters: {total_chars:,}")
-    log.info(f"    • Total words: {total_words:,}")
-    log.info(f"    • Avg chars/doc: {avg_chars_per_doc:.0f}")
-    if ext == ".pdf":
-        log.info(f"  ℹ️  Note: PDFs are split per-page for better citation accuracy")
+        # Calculate total text statistics for folder
+        total_chars = sum(len(doc.text) for doc in docs)
+        total_words = sum(len(doc.text.split()) for doc in docs)
+        avg_chars_per_doc = total_chars / len(docs) if docs else 0
+
+        log.info(f"✓ Loaded {len(docs)} document(s) from folder in {dur_s(t):.2f}s")
+        log.info(f"  📊 Statistics:")
+        log.info(f"    • Total characters: {total_chars:,}")
+        log.info(f"    • Total words: {total_words:,}")
+        log.info(f"    • Avg chars/doc: {avg_chars_per_doc:.0f}")
+        log.info(f"  ℹ️  Note: Loaded recursively from folder with {file_count} source files")
+
     else:
-        log.info(f"  ℹ️  Note: {ext.upper()} loaded as single document for context preservation")
+        # Handle single file
+        ext = path.suffix.lower()
+        file_size_mb = path.stat().st_size / (1024 * 1024)
+
+        log.info(f"Loading document: {doc_path}")
+        log.info(f"  Format: {ext}, Size: {file_size_mb:.1f} MB")
+
+        try:
+            if ext == ".pdf":
+                # PDF: Use PyMuPDFReader (page-per-document)
+                docs = PyMuPDFReader().load(file_path=str(path))
+
+            elif ext == ".docx":
+                # DOCX: Load as single document
+                try:
+                    from docx import Document as DocxDocument
+                except ImportError:
+                    raise ImportError(
+                        "python-docx not installed. Install with: pip install python-docx"
+                    )
+
+                docx_doc = DocxDocument(str(path))
+                text = "\n".join([p.text for p in docx_doc.paragraphs])
+
+                from llama_index.core.schema import Document
+                docs = [Document(text=text, metadata={"source": str(path), "format": "docx"})]
+
+            elif ext == ".pptx":
+                # PPTX: PowerPoint - extract text from slides
+                try:
+                    from pptx import Presentation
+                except ImportError:
+                    raise ImportError(
+                        "python-pptx not installed. Install with: pip install python-pptx"
+                    )
+
+                prs = Presentation(str(path))
+                text_parts = []
+                for slide_num, slide in enumerate(prs.slides, 1):
+                    slide_text = []
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            slide_text.append(shape.text)
+                    if slide_text:
+                        text_parts.append(f"[Slide {slide_num}]\n" + "\n".join(slide_text))
+
+                text = "\n\n".join(text_parts)
+                from llama_index.core.schema import Document
+                docs = [Document(text=text, metadata={"source": str(path), "format": "pptx"})]
+
+            elif ext in (".html", ".htm"):
+                # HTML: Clean and extract text content
+                raw_html = path.read_text(encoding="utf-8", errors="replace")
+                text = clean_html_content(raw_html)
+
+                from llama_index.core.schema import Document
+                docs = [Document(text=text, metadata={"source": str(path), "format": "html"})]
+
+            elif ext in text_extensions:
+                # Text-based files: Load as single document
+                text = path.read_text(encoding="utf-8", errors="replace")
+
+                from llama_index.core.schema import Document
+                docs = [Document(text=text, metadata={"source": str(path), "format": ext[1:]})]
+
+            else:
+                raise ValueError(
+                    f"Unsupported file format: {ext}\n"
+                    f"  Supported: .pdf, .docx, .pptx, .txt, .md, .html, .json, .csv, .xml,\n"
+                    f"             .py, .js, .cpp, .java, .go, .rs, .php, .m, and more\n"
+                    f"  File: {doc_path}"
+                )
+
+        except Exception as e:
+            if isinstance(e, (FileNotFoundError, ValueError, ImportError)):
+                raise
+            raise RuntimeError(
+                f"Failed to load document: {doc_path}\n"
+                f"  Error: {type(e).__name__}: {e}\n"
+                f"  Fix: Ensure the file is valid and not corrupted"
+            )
+
+        if not docs:
+            raise ValueError(
+                f"Document loaded but contains no content: {doc_path}\n"
+                f"  The document may be empty or corrupted"
+            )
+
+        # Calculate total text statistics
+        total_chars = sum(len(doc.text) for doc in docs)
+        total_words = sum(len(doc.text.split()) for doc in docs)
+        avg_chars_per_doc = total_chars / len(docs) if docs else 0
+
+        log.info(f"✓ Loaded {len(docs)} document(s) in {dur_s(t):.2f}s")
+        log.info(f"  📊 Statistics:")
+        log.info(f"    • Total characters: {total_chars:,}")
+        log.info(f"    • Total words: {total_words:,}")
+        log.info(f"    • Avg chars/doc: {avg_chars_per_doc:.0f}")
+        if ext == ".pdf":
+            log.info(f"  ℹ️  Note: PDFs are split per-page for better citation accuracy")
+        else:
+            log.info(f"  ℹ️  Note: {ext.upper()} loaded as single document for context preservation")
 
     return docs
 
@@ -1016,7 +1919,9 @@ def chunk_documents(docs: List[Any]) -> Tuple[List[str], List[int]]:
 
     if chunks:
         log.info(f"\n  📝 Example chunk (first):")
-        log.info(f"    \"{preview(chunks[0], 150)}\"")
+        example_text = preview(chunks[0], 150)
+        colored_example = colorize_participants(example_text)
+        log.info(f"    \"{colored_example}\"")
 
     return chunks, doc_idxs
 
@@ -1038,6 +1943,8 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
     index_signature = f"cs{S.chunk_size}_ov{S.chunk_overlap}_{S.embed_model_name.replace('/', '_')}"
 
     nodes: List[TextNode] = []
+    chat_logs_detected = 0
+
     for i, chunk in enumerate(chunks):
         n = TextNode(text=chunk)
 
@@ -1052,6 +1959,13 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
         n.metadata["_embed_model"] = S.embed_model_name
         n.metadata["_index_signature"] = index_signature
 
+        # Extract chat metadata if this looks like a chat log
+        if os.getenv("EXTRACT_CHAT_METADATA", "1") == "1":
+            chat_meta = extract_chat_metadata(chunk)
+            if chat_meta:
+                n.metadata.update(chat_meta)
+                chat_logs_detected += 1
+
         nodes.append(n)
 
         if (i + 1) % 500 == 0:
@@ -1059,6 +1973,12 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
 
     log.info(f"Built {len(nodes)} nodes in {dur_s(t):.2f}s")
     log.info(f"Index signature: {index_signature}")
+
+    if chat_logs_detected > 0:
+        log.info(f"✓ Detected {chat_logs_detected} chat log chunks with metadata extracted")
+        log.info(f"  • Metadata includes: participants, dates, message counts")
+        log.info(f"  • This enables advanced filtering and hybrid search")
+
     return nodes
 
 
@@ -1098,9 +2018,22 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
     batches = list(chunked(texts, S.embed_batch))
 
     log.info(f"\n🔄 Processing {len(batches)} batches...")
+    log.info("")  # Extra line for better progress bar visibility
 
     # Use tqdm if available for better progress visualization
-    iterator = tqdm(enumerate(batches, start=1), total=len(batches), desc="Embedding", unit="batch") if tqdm else enumerate(batches, start=1)
+    if tqdm:
+        iterator = tqdm(
+            enumerate(batches, start=1),
+            total=len(batches),
+            desc="⚡ Embedding batches",
+            unit="batch",
+            ncols=100,
+            position=0,
+            leave=True,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]"
+        )
+    else:
+        iterator = enumerate(batches, start=1)
 
     batch_times = []
     for batch_idx, batch_texts in iterator:
@@ -1122,13 +2055,14 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
         batch_time = dur_s(tb)
         batch_times.append(batch_time)
 
-        # Progress logs: every batch (but less verbose if using tqdm)
-        if not tqdm:
+        # Update progress bar with throughput info
+        if tqdm:
+            rate = done / max(dur_s(t), 1e-6)
+            iterator.set_postfix({"nodes/s": f"{rate:.1f}", "nodes": f"{done}/{total}"})
+        else:
+            # Progress logs without tqdm
             rate = done / max(dur_s(t), 1e-6)
             log.info(f"  📦 Batch {batch_idx:04d} → {done}/{total} nodes | {batch_time:.2f}s | ~{rate:.1f} nodes/s")
-        elif batch_idx % 10 == 0:  # Log every 10 batches with tqdm
-            rate = done / max(dur_s(t), 1e-6)
-            log.debug(f"  Progress: {done}/{total} nodes | ~{rate:.1f} nodes/s")
 
     total_time = dur_s(t)
     avg_batch_time = sum(batch_times) / len(batch_times) if batch_times else 0
@@ -1216,6 +2150,93 @@ def insert_nodes(vector_store: PGVectorStore, nodes: List[TextNode]) -> None:
         if before is not None:
             log.info(f"    • New rows added: {after - before}")
     log.info(f"\n  ✓ Vector index is now ready for semantic search!")
+
+
+def create_hnsw_index(table_name: str = None) -> bool:
+    """
+    Create an HNSW index on the embedding column for fast similarity search.
+
+    HNSW (Hierarchical Navigable Small World) provides:
+      - O(log n) search complexity vs O(n) for sequential scan
+      - 50-100x faster retrieval on tables with >10K rows
+      - Approximate nearest neighbor with high recall (typically >95%)
+
+    Args:
+        table_name: Table name (without 'data_' prefix). Uses S.table if not provided.
+
+    Returns:
+        True if index was created or already exists, False on error.
+    """
+    table = table_name or S.table
+    actual_table = f"data_{table}"
+    index_name = f"{actual_table}_hnsw_idx"
+
+    log.info(f"\n{'='*70}")
+    log.info(f"STEP 4: INDEXING - Creating HNSW index for fast retrieval")
+    log.info(f"{'='*70}")
+
+    log.info(f"\n💡 Why HNSW indexing matters:")
+    log.info(f"  • Without index: Sequential scan compares query to EVERY embedding")
+    log.info(f"  • With HNSW: Graph-based search finds neighbors in O(log n) time")
+    log.info(f"  • Speedup: 50-100x faster on tables with >10,000 rows")
+    log.info(f"  • Trade-off: Slightly approximate results (typically >95% recall)")
+
+    try:
+        conn = db_conn()
+        conn.autocommit = True
+
+        with conn.cursor() as cur:
+            # Check if index already exists
+            cur.execute("""
+                SELECT indexname FROM pg_indexes
+                WHERE tablename = %s AND indexname = %s
+            """, (actual_table, index_name))
+
+            if cur.fetchone():
+                log.info(f"\n✓ HNSW index '{index_name}' already exists")
+                conn.close()
+                return True
+
+            # Get row count to estimate indexing time
+            cur.execute(f'SELECT COUNT(*) FROM "{actual_table}"')
+            row_count = cur.fetchone()[0]
+
+            log.info(f"\n⚙️  Creating HNSW index:")
+            log.info(f"  • Table: {actual_table}")
+            log.info(f"  • Index name: {index_name}")
+            log.info(f"  • Rows to index: {row_count:,}")
+            log.info(f"  • Parameters: m=16 (connections), ef_construction=64 (build quality)")
+
+            if row_count > 50000:
+                log.info(f"  ⚠️  Large table - indexing may take several minutes...")
+
+            t = now_ms()
+
+            # Create the HNSW index
+            # m=16: Number of connections per layer (higher = better recall, more memory)
+            # ef_construction=64: Build-time search width (higher = better quality, slower build)
+            cur.execute(f'''
+                CREATE INDEX "{index_name}"
+                ON "{actual_table}"
+                USING hnsw (embedding vector_cosine_ops)
+                WITH (m = 16, ef_construction = 64)
+            ''')
+
+            index_time = dur_s(t)
+
+            log.info(f"\n✓ HNSW index created in {index_time:.2f}s")
+            log.info(f"  • Indexed {row_count:,} embeddings")
+            log.info(f"  • Throughput: {row_count / index_time:.1f} vectors/second")
+            log.info(f"\n  🚀 Similarity search is now optimized!")
+
+        conn.close()
+        return True
+
+    except Exception as e:
+        log.error(f"✗ Failed to create HNSW index: {e}")
+        log.error(f"  You can create it manually with:")
+        log.error(f"  CREATE INDEX ON \"{actual_table}\" USING hnsw (embedding vector_cosine_ops);")
+        return False
 
 
 def health_check() -> None:
@@ -1345,7 +2366,9 @@ def run_query(query_engine: Any, question: str, show_sources: bool = True, retri
             score = node.score if hasattr(node, 'score') else None
             score_str = f" (similarity: {score:.4f})" if score else ""
             log.info(f"  {i}. Source: {page}{score_str}")
-            log.info(f"     \"{preview(node.node.get_content(), 150)}\"")
+            source_text = preview(node.node.get_content(), 150)
+            colored_source = colorize_participants(source_text)
+            log.info(f"     \"{colored_source}\"")
         if len(resp.source_nodes) > 3:
             log.info(f"  ... and {len(resp.source_nodes) - 3} more chunks")
 
@@ -1418,6 +2441,15 @@ def main():
     # Override settings from CLI args
     if args.doc:
         S.pdf_path = args.doc
+        # Regenerate table name if PGTABLE wasn't explicitly set
+        if not os.getenv("PGTABLE"):
+            S.table = generate_table_name(
+                S.pdf_path,
+                S.chunk_size,
+                S.chunk_overlap,
+                S.embed_model_name
+            )
+            log.debug(f"Regenerated table name for CLI doc: {S.table}")
     if args.query:
         S.question = args.query
 
@@ -1434,15 +2466,18 @@ def main():
     log.info(f"Retrieval: TOP_K={S.top_k}")
     log.info(f"Embeddings: model={S.embed_model_name} dim={S.embed_dim} batch={S.embed_batch}")
     log.info(f"LLM: CTX={S.context_window} MAX_NEW_TOKENS={S.max_new_tokens} TEMP={S.temperature} N_GPU_LAYERS={S.n_gpu_layers} N_BATCH={S.n_batch}")
-    log.info(f"Mode: {'Query-only' if args.query_only else 'Interactive' if args.interactive else 'Full pipeline'}")
+    mode = 'Query-only' if args.query_only else 'Index-only' if args.index_only else 'Interactive' if args.interactive else 'Full pipeline'
+    log.info(f"Mode: {mode}")
 
-    # Suggest configuration-specific table names for experimentation
-    if S.table in ["llama2_paper", "ethical-slut_paper"]:  # Default table names
-        suggested_table = f"{S.table}_cs{S.chunk_size}_ov{S.chunk_overlap}"
+    # Info about table naming
+    if not os.getenv("PGTABLE"):
         log.info("")
-        log.info("💡 TIP: When experimenting with chunk_size, use config-specific table names:")
-        log.info(f"   PGTABLE={suggested_table}")
-        log.info("   This keeps each configuration in a separate, clean index.")
+        log.info("📋 Auto-generated table name based on configuration:")
+        log.info(f"   Format: {{doc}}_cs{{size}}_ov{{overlap}}_{{model}}_{{YYMMDD}}")
+        log.info(f"   To use a custom name, set: PGTABLE=my_table_name")
+    else:
+        log.info("")
+        log.info("📋 Using explicitly set table name from PGTABLE env var")
 
     if not args.skip_validation:
         # Run health checks before starting heavy operations
@@ -1496,6 +2531,21 @@ def main():
 
         reset_table_if_requested()
 
+        # Print all RAG-related environment variables for verification
+        log.info("=== ENVIRONMENT VARIABLES ===")
+        rag_env_vars = [
+            "CHUNK_SIZE", "CHUNK_OVERLAP", "TOP_K",
+            "EMBED_MODEL", "EMBED_DIM", "EMBED_BATCH", "EMBED_BACKEND",
+            "N_GPU_LAYERS", "N_BATCH", "CTX", "MAX_NEW_TOKENS", "TEMP",
+            "HYBRID_ALPHA", "MMR_THRESHOLD", "ENABLE_FILTERS",
+            "LOG_FULL_CHUNKS", "COLORIZE_CHUNKS", "LOG_LEVEL",
+            "EXTRACT_CHAT_METADATA", "PGTABLE", "PDF_PATH", "RESET_TABLE"
+        ]
+        for var in rag_env_vars:
+            value = os.getenv(var, "(not set)")
+            log.info(f"  {var:25s} = {value}")
+        log.info("=" * 70)
+
         # Load embedding model for indexing
         embed_model = build_embed_model()
 
@@ -1509,8 +2559,32 @@ def main():
 
         embed_nodes(embed_model, nodes)
         insert_nodes(vector_store, nodes)
+        create_hnsw_index()  # Create HNSW index for fast similarity search
+
+        # Exit early if index-only mode (skip LLM loading and queries)
+        if args.index_only:
+            log.info("=== INDEXING COMPLETE ===")
+            log.info(f"  Indexed {len(nodes)} chunks into table '{S.table}'")
+            log.info("  Use --query-only or option 2 in interactive menu to query this index")
+            return
     else:
         log.info("=== SKIPPING INDEXING (query-only mode) ===")
+
+        # Print all RAG-related environment variables for verification
+        log.info("=== ENVIRONMENT VARIABLES ===")
+        rag_env_vars = [
+            "CHUNK_SIZE", "CHUNK_OVERLAP", "TOP_K",
+            "EMBED_MODEL", "EMBED_DIM", "EMBED_BATCH", "EMBED_BACKEND",
+            "N_GPU_LAYERS", "N_BATCH", "CTX", "MAX_NEW_TOKENS", "TEMP",
+            "HYBRID_ALPHA", "MMR_THRESHOLD", "ENABLE_FILTERS",
+            "LOG_FULL_CHUNKS", "COLORIZE_CHUNKS", "LOG_LEVEL",
+            "EXTRACT_CHAT_METADATA", "PGTABLE", "PDF_PATH", "RESET_TABLE"
+        ]
+        for var in rag_env_vars:
+            value = os.getenv(var, "(not set)")
+            log.info(f"  {var:25s} = {value}")
+        log.info("=" * 70)
+
         # Still need embed model for queries
         embed_model = build_embed_model()
         vector_store = make_vector_store()
@@ -1548,7 +2622,29 @@ def main():
     log.info("=== LOADING LLM ===")
     llm = build_llm()
 
-    retriever = VectorDBRetriever(vector_store, embed_model, similarity_top_k=S.top_k)
+    # Choose retriever based on configuration
+    log.info("=== CONFIGURING RETRIEVER ===")
+    if S.hybrid_alpha < 1.0 or S.enable_filters or S.mmr_threshold > 0:
+        log.info("Using HybridRetriever with advanced features:")
+        if S.hybrid_alpha < 1.0:
+            log.info(f"  ✓ Hybrid search: α={S.hybrid_alpha} (BM25 weight={1-S.hybrid_alpha:.1f})")
+        if S.enable_filters:
+            log.info(f"  ✓ Metadata filtering enabled (use 'participant:Name' or 'after:YYYY-MM-DD')")
+        if S.mmr_threshold > 0:
+            log.info(f"  ✓ MMR diversity enabled (λ={S.mmr_threshold})")
+
+        retriever = HybridRetriever(
+            vector_store,
+            embed_model,
+            similarity_top_k=S.top_k,
+            alpha=S.hybrid_alpha,
+            enable_metadata_filter=S.enable_filters,
+            mmr_threshold=S.mmr_threshold
+        )
+    else:
+        log.info("Using standard vector similarity search")
+        retriever = VectorDBRetriever(vector_store, embed_model, similarity_top_k=S.top_k)
+
     query_engine = RetrieverQueryEngine.from_args(retriever, llm=llm)
 
     # --- Query mode selection ---

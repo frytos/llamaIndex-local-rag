@@ -1,0 +1,253 @@
+# Local RAG Pipeline - Claude Development Guide
+
+**Last Updated**: December 2024 | **Version**: 1.0.0
+
+## Project Overview
+
+A local Retrieval-Augmented Generation (RAG) pipeline optimized for M1 Mac Mini 16GB. Supports indexing documents (PDF, HTML, code files, etc.) into PostgreSQL+pgvector and querying with a local LLM (Mistral 7B via llama.cpp).
+
+## Tech Stack
+
+- **Runtime**: Python 3.11+
+- **Framework**: LlamaIndex
+- **Vector Store**: PostgreSQL + pgvector
+- **Embeddings**: HuggingFace (bge-small-en, all-MiniLM-L6-v2)
+- **LLM**: llama.cpp with GGUF models (Mistral 7B)
+- **GPU**: Apple Metal (MPS) for embeddings
+- **Web UI**: Streamlit + Plotly
+
+## Quick Start Commands
+
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Run interactive CLI
+python rag_interactive.py
+
+# Run main pipeline
+python rag_low_level_m1_16gb_verbose.py
+
+# Launch web UI
+streamlit run rag_web.py
+
+# Run with custom config
+CHUNK_SIZE=500 CHUNK_OVERLAP=100 PDF_PATH=data/myfile.pdf PGTABLE=myindex python rag_low_level_m1_16gb_verbose.py
+```
+
+## File Structure
+
+```
+llamaIndex-local-rag/
+├── rag_low_level_m1_16gb_verbose.py  # Main RAG pipeline (core logic)
+├── rag_interactive.py                 # CLI menu interface
+├── rag_web.py                         # Streamlit web UI
+├── data/                              # Documents to index
+├── scripts/                           # Utility scripts
+│   ├── tensorboard_embeddings.py     # Embedding visualization
+│   └── chainlit_app.py               # Alternative chat UI
+├── archive/                           # Old versions/experiments
+├── query_logs/                        # Query history (JSON)
+└── .claude/                           # Claude Code config
+    ├── settings.local.json
+    ├── agents/
+    └── commands/
+```
+
+## Key Configuration (Environment Variables)
+
+### Document & Index
+```bash
+PDF_PATH=data/document.pdf    # File or folder to index
+PGTABLE=my_index              # PostgreSQL table name
+RESET_TABLE=1                 # Drop table before indexing (0 or 1)
+```
+
+### Chunking (RAG Quality Tuning)
+```bash
+CHUNK_SIZE=700                # Characters per chunk (100-2000)
+CHUNK_OVERLAP=150             # Overlap between chunks
+```
+
+### Embedding Model
+```bash
+EMBED_MODEL=BAAI/bge-small-en # Model name
+EMBED_DIM=384                  # Vector dimensions
+EMBED_BATCH=64                 # Batch size for embedding
+```
+
+### LLM Configuration
+```bash
+CTX=3072                      # Context window size
+MAX_NEW_TOKENS=256            # Max generation length
+TEMP=0.1                      # Temperature (0.0-1.0)
+N_GPU_LAYERS=24               # Layers to offload to GPU
+N_BATCH=256                   # LLM batch size
+```
+
+### Retrieval
+```bash
+TOP_K=4                       # Number of chunks to retrieve
+```
+
+### Database
+```bash
+PGHOST=localhost
+PGPORT=5432
+PGUSER=fryt
+PGPASSWORD=frytos
+DB_NAME=vector_db
+```
+
+## Core Functions (rag_low_level_m1_16gb_verbose.py)
+
+### Document Processing
+- `load_documents(path)` - Load files/folders
+- `clean_html_content(html)` - Strip HTML tags
+- `chunk_documents(docs)` - Split into chunks
+- `build_nodes(docs, chunks, doc_idxs)` - Create TextNodes with metadata
+
+### Embedding & Storage
+- `build_embed_model()` - Load HuggingFace model (auto-detects MPS)
+- `embed_nodes(model, nodes)` - Compute embeddings
+- `make_vector_store()` - Connect to pgvector
+- `insert_nodes(store, nodes)` - Store in database
+
+### Query & Retrieval
+- `VectorDBRetriever` - Custom retriever with similarity scoring
+- `build_llm()` - Load Mistral via llama.cpp
+- `run_query(engine, question)` - Execute RAG query
+
+### Database Utilities
+- `ensure_db_exists()` - Create database
+- `ensure_pgvector_extension()` - Enable pgvector
+- `count_rows()` - Get row count
+- `check_index_configuration()` - Detect config mismatches
+
+## Code Style Guidelines
+
+### Python Conventions
+- **Docstrings**: Google style
+- **Type hints**: Use for function signatures
+- **Naming**: snake_case for functions/variables, PascalCase for classes
+- **Line length**: 100 characters max
+
+### Example Pattern
+```python
+def process_document(
+    doc_path: str,
+    chunk_size: int = 700,
+    chunk_overlap: int = 150,
+) -> List[TextNode]:
+    """Process a document into chunked nodes.
+
+    Args:
+        doc_path: Path to document file or folder
+        chunk_size: Target chunk size in characters
+        chunk_overlap: Overlap between adjacent chunks
+
+    Returns:
+        List of TextNode objects with embeddings
+    """
+    docs = load_documents(doc_path)
+    chunks, doc_idxs = chunk_documents(docs)
+    return build_nodes(docs, chunks, doc_idxs)
+```
+
+## Common Pitfalls
+
+### Context Window Overflow
+```python
+# Problem: Chunks too large + TOP_K too high = token overflow
+# Solution: Reduce chunk_size or TOP_K
+CTX=8192 TOP_K=3 CHUNK_SIZE=500
+```
+
+### Mixed Index Detection
+```python
+# Problem: Indexing with different chunk sizes into same table
+# Solution: Use RESET_TABLE=1 or different table name
+PGTABLE=doc_cs500_ov100  # Include config in name
+```
+
+### GPU Memory (M1 16GB)
+```python
+# Optimal settings for M1 16GB
+N_GPU_LAYERS=24   # ~75% of layers on GPU
+N_BATCH=256       # Reasonable batch size
+EMBED_BATCH=64    # For embeddings
+```
+
+## RAG Quality Tuning
+
+### Chunk Size Guidelines
+| Size | Use Case | Trade-off |
+|------|----------|-----------|
+| 100-300 | Q&A, chat logs | Precise but loses context |
+| 500-800 | General documents | Balanced (recommended) |
+| 1000-2000 | Long-form content | More context but less precise |
+
+### Overlap Ratio
+- **10-15%**: Minimal, fast indexing
+- **15-25%**: Balanced (recommended)
+- **25-30%**: Maximum context preservation
+
+## Testing
+
+```bash
+# Test database connection
+PGPASSWORD=frytos psql -h localhost -U fryt -d vector_db -c "SELECT version();"
+
+# Test embedding model
+python -c "from rag_low_level_m1_16gb_verbose import build_embed_model; m = build_embed_model(); print('OK')"
+
+# Test full pipeline (query-only)
+python rag_low_level_m1_16gb_verbose.py --query-only --query "test"
+```
+
+## Troubleshooting
+
+### Issue: "Transaction aborted" error
+**Solution**: Database connection not using autocommit
+```python
+conn = psycopg2.connect(...)
+conn.autocommit = True
+```
+
+### Issue: Embeddings as strings (not arrays)
+**Solution**: Parse with json.loads in visualization code
+```python
+import json
+emb = json.loads(embedding_string)
+```
+
+### Issue: Slow embedding on CPU
+**Solution**: Verify MPS is detected
+```python
+import torch
+print(torch.backends.mps.is_available())  # Should be True
+```
+
+### Issue: Context window overflow
+**Solution**: Increase CTX or reduce TOP_K/CHUNK_SIZE
+```bash
+CTX=8192 TOP_K=3 CHUNK_SIZE=500 python rag_low_level_m1_16gb_verbose.py
+```
+
+## Performance Benchmarks (M1 Mac Mini 16GB)
+
+| Operation | Time | Throughput |
+|-----------|------|------------|
+| Load 1000 HTML files | ~40s | 25 files/s |
+| Chunk 1000 docs | ~6s | 166 docs/s |
+| Embed 10000 chunks | ~150s | 67 chunks/s |
+| Insert 10000 nodes | ~8s | 1250 nodes/s |
+| Query (retrieval) | ~0.3s | - |
+| Query (generation) | ~5-15s | ~10 tokens/s |
+
+## Available Slash Commands
+
+- `/run-rag` - Run RAG pipeline with parameters
+- `/optimize-rag` - Analyze and suggest optimizations
+- `/audit-index` - Check index health and consistency
+- `/compare-chunks` - Compare different chunk configurations
