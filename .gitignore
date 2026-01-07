@@ -1,12 +1,62 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
-.DS_Store
+*.pyo
+*.pyd
+.Python
+
+# Environment & Secrets
 .env
+.env.local
+*.env
+!config/.env.example
+*.pem
+*.key
+*.crt
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Data & Models
 data/
+*.gguf
+*.bin
+models/
+
+# Logs & Results
+logs/
+*.log
+query_logs/
+benchmarks/
+results/
+*.png
 
 # Archive (local development artifacts)
 archive/
 
-# Chainlit cache
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Chainlit
 .chainlit/
+
+# Temporary files
+*.tmp
+.cache/
+
+# Large data files
+*.tar.gz
+*.zip

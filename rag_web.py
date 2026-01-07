@@ -20,6 +20,9 @@ import plotly.graph_objects as go
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Import shared utilities
+from utils.naming import extract_model_short_name, generate_table_name
+
 # Import from existing RAG script
 from rag_low_level_m1_16gb_verbose import (
     Settings,
@@ -90,8 +93,8 @@ def init_session_state():
         # Database settings
         "db_host": os.environ.get("PGHOST", "localhost"),
         "db_port": os.environ.get("PGPORT", "5432"),
-        "db_user": os.environ.get("PGUSER", "fryt"),
-        "db_password": os.environ.get("PGPASSWORD", "frytos"),
+        "db_user": os.environ.get("PGUSER"),
+        "db_password": os.environ.get("PGPASSWORD"),
         "db_name": os.environ.get("DB_NAME", "vector_db"),
 
         # Cached resources
@@ -303,49 +306,7 @@ def list_documents() -> Tuple[List[Path], List[Tuple[Path, int]]]:
 
     return files, folders
 
-def extract_model_short_name(model_name: str) -> str:
-    """Extract a short, readable name from embedding model path."""
-    name = model_name.split('/')[-1]
-    if 'bge' in name.lower():
-        return 'bge'
-    elif 'minilm' in name.lower():
-        return 'minilm'
-    elif 'e5' in name.lower():
-        return 'e5'
-    elif 'mpnet' in name.lower():
-        return 'mpnet'
-    elif 'roberta' in name.lower():
-        return 'roberta'
-    elif 'bert' in name.lower():
-        return 'bert'
-    else:
-        parts = name.lower().replace('sentence-', '').replace('all-', '').split('-')
-        return parts[0][:8]
-
-
-def generate_table_name(doc_path: Path, chunk_size: int, chunk_overlap: int,
-                       embed_model: str = "BAAI/bge-small-en") -> str:
-    """
-    Generate a suggested table name.
-
-    Format: {doc}_cs{size}_ov{overlap}_{model}_{YYMMDD}
-    """
-    from datetime import datetime
-
-    name = doc_path.stem.lower()
-    name = "".join(c if c.isalnum() else "_" for c in name)
-
-    # Limit length
-    if len(name) > 30:
-        name = name[:30]
-
-    # Extract short model name
-    model_short = extract_model_short_name(embed_model)
-
-    # Get date in YYMMDD format
-    date_str = datetime.now().strftime("%y%m%d")
-
-    return f"{name}_cs{chunk_size}_ov{chunk_overlap}_{model_short}_{date_str}"
+# Functions extract_model_short_name and generate_table_name now imported from utils.naming
 
 # =============================================================================
 # Cached Resources

@@ -6,11 +6,13 @@ A production-ready Retrieval-Augmented Generation (RAG) system that runs entirel
 
 - **100% Local & Private**: No external API calls - all processing happens on your machine
 - **Vector Database**: PostgreSQL with pgvector extension for scalable vector storage
-- **Local LLM**: llama.cpp for efficient local inference (Mistral 7B Instruct)
-- **Multiple Document Formats**: PDF, DOCX, TXT, and Markdown support
+- **Local LLM**: llama.cpp (CPU/Metal) or vLLM (CUDA) for efficient inference (Mistral 7B Instruct)
+- **GPU Acceleration**: vLLM support for NVIDIA GPUs (15x faster on RTX 4090)
+- **Multiple Document Formats**: PDF, DOCX, TXT, HTML, and Markdown support
 - **Extensive Logging**: Learn how RAG works with detailed pipeline logging
 - **Docker Integration**: Easy PostgreSQL + pgvector setup
-- **Optimized for Apple Silicon**: Metal GPU acceleration for faster inference
+- **Optimized for Apple Silicon**: Metal GPU acceleration for Mac
+- **Cloud Deployment**: RunPod templates for GPU-accelerated inference
 
 ## Quick Start
 
@@ -40,12 +42,18 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Start PostgreSQL with pgvector:
+4. Set up environment variables:
 ```bash
-docker-compose up -d
+cp config/.env.example .env
+# Edit .env and add your database credentials
 ```
 
-5. Run the RAG pipeline:
+5. Start PostgreSQL with pgvector:
+```bash
+docker-compose -f config/docker-compose.yml up -d
+```
+
+6. Run the RAG pipeline:
 ```bash
 RESET_TABLE=1 python rag_low_level_m1_16gb_verbose.py
 ```

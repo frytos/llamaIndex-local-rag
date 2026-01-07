@@ -1,10 +1,10 @@
 # Local RAG Pipeline - Claude Development Guide
 
-**Last Updated**: December 2024 | **Version**: 1.0.0
+**Last Updated**: January 2026 | **Version**: 2.0.0
 
 ## Project Overview
 
-A local Retrieval-Augmented Generation (RAG) pipeline optimized for M1 Mac Mini 16GB. Supports indexing documents (PDF, HTML, code files, etc.) into PostgreSQL+pgvector and querying with a local LLM (Mistral 7B via llama.cpp).
+A local Retrieval-Augmented Generation (RAG) pipeline optimized for both M1 Mac (16GB) and GPU servers (RTX 4090). Supports indexing documents (PDF, HTML, code files, etc.) into PostgreSQL+pgvector and querying with local LLM (Mistral 7B via llama.cpp or vLLM for GPU acceleration).
 
 ## Tech Stack
 
@@ -12,8 +12,8 @@ A local Retrieval-Augmented Generation (RAG) pipeline optimized for M1 Mac Mini 
 - **Framework**: LlamaIndex
 - **Vector Store**: PostgreSQL + pgvector
 - **Embeddings**: HuggingFace (bge-small-en, all-MiniLM-L6-v2)
-- **LLM**: llama.cpp with GGUF models (Mistral 7B)
-- **GPU**: Apple Metal (MPS) for embeddings
+- **LLM**: llama.cpp (GGUF) or vLLM (AWQ) for Mistral 7B
+- **GPU**: Apple Metal (MPS) on Mac, CUDA on NVIDIA GPUs
 - **Web UI**: Streamlit + Plotly
 
 ## Quick Start Commands
@@ -42,12 +42,47 @@ llamaIndex-local-rag/
 ├── rag_low_level_m1_16gb_verbose.py  # Main RAG pipeline (core logic)
 ├── rag_interactive.py                 # CLI menu interface
 ├── rag_web.py                         # Streamlit web UI
-├── data/                              # Documents to index
+├── vllm_client.py                     # vLLM OpenAI-compatible client
+├── vllm_wrapper.py                    # vLLM high-level wrapper
+├── reranker.py                        # Query reranking utilities
+├── query_cache.py                     # Query caching system
+├── performance_analysis.py            # Performance benchmarking
+├── requirements.txt                   # Python dependencies
+├── README.md                          # Project documentation
+├── CLAUDE.md                          # This file - developer guide
+│
+├── config/                            # Configuration files
+│   ├── .env.example                   # Environment variables template
+│   ├── docker-compose.yml             # Docker setup
+│   ├── pytest.ini                     # Test configuration
+│   ├── requirements_vllm.txt          # vLLM dependencies
+│   ├── runpod_config.env              # RunPod configuration
+│   └── runpod_vllm_config.env         # RunPod vLLM configuration
+│
+├── docs/                              # Documentation
+│   ├── START_HERE.md                  # Getting started guide
+│   ├── RUNPOD_FINAL_SETUP.md          # RunPod deployment guide
+│   ├── VLLM_SERVER_GUIDE.md           # vLLM server setup
+│   ├── PERFORMANCE_QUICK_START.md     # Performance tuning
+│   ├── ENVIRONMENT_VARIABLES.md       # Config reference
+│   └── *.md                           # Other guides
+│
 ├── scripts/                           # Utility scripts
-│   ├── tensorboard_embeddings.py     # Embedding visualization
-│   └── chainlit_app.py               # Alternative chat UI
+│   ├── start_vllm_server.sh           # Start vLLM server
+│   ├── QUICK_START_OPTIMIZED.sh       # Quick start script
+│   ├── QUICK_START_VLLM.sh            # vLLM quick start
+│   ├── tensorboard_embeddings.py      # Embedding visualization
+│   ├── chainlit_app.py                # Alternative chat UI
+│   └── *.py, *.sh                     # Other utilities
+│
+├── data/                              # Documents to index (gitignored)
+├── logs/                              # Log files (gitignored)
+├── benchmarks/                        # Performance results (gitignored)
+├── query_logs/                        # Query history (gitignored)
+├── results/                           # Analysis results (gitignored)
 ├── archive/                           # Old versions/experiments
-├── query_logs/                        # Query history (JSON)
+├── tests/                             # Unit tests
+├── utils/                             # Shared utilities
 └── .claude/                           # Claude Code config
     ├── settings.local.json
     ├── agents/
@@ -94,10 +129,12 @@ TOP_K=4                       # Number of chunks to retrieve
 ```bash
 PGHOST=localhost
 PGPORT=5432
-PGUSER=fryt
-PGPASSWORD=frytos
+PGUSER=your_database_user
+PGPASSWORD=your_database_password
 DB_NAME=vector_db
 ```
+
+**Note**: Set these in `.env` file (copy from `config/.env.example`) or export them.
 
 ## Core Functions (rag_low_level_m1_16gb_verbose.py)
 
@@ -195,8 +232,9 @@ EMBED_BATCH=64    # For embeddings
 ## Testing
 
 ```bash
-# Test database connection
-PGPASSWORD=frytos psql -h localhost -U fryt -d vector_db -c "SELECT version();"
+# Test database connection (load credentials from .env)
+source .env
+psql -h $PGHOST -U $PGUSER -d $DB_NAME -c "SELECT version();"
 
 # Test embedding model
 python -c "from rag_low_level_m1_16gb_verbose import build_embed_model; m = build_embed_model(); print('OK')"

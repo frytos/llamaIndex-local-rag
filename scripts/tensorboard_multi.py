@@ -17,8 +17,11 @@ from datetime import datetime
 DB_NAME = os.getenv("DB_NAME", "vector_db")
 PGHOST = os.getenv("PGHOST", "localhost")
 PGPORT = int(os.getenv("PGPORT", "5432"))
-PGUSER = os.getenv("PGUSER", "fryt")
-PGPASSWORD = os.getenv("PGPASSWORD", "frytos")
+PGUSER = os.getenv("PGUSER")
+PGPASSWORD = os.getenv("PGPASSWORD")
+
+if not PGUSER or not PGPASSWORD:
+    raise ValueError("PGUSER and PGPASSWORD environment variables required")
 
 
 def fetch_embeddings_from_table(table_name):

@@ -18,8 +18,11 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 DB_NAME = os.getenv("DB_NAME", "vector_db")
 PGHOST = os.getenv("PGHOST", "localhost")
 PGPORT = int(os.getenv("PGPORT", "5432"))
-PGUSER = os.getenv("PGUSER", "fryt")
-PGPASSWORD = os.getenv("PGPASSWORD", "frytos")
+PGUSER = os.getenv("PGUSER")
+PGPASSWORD = os.getenv("PGPASSWORD")
+
+if not PGUSER or not PGPASSWORD:
+    raise ValueError("PGUSER and PGPASSWORD environment variables required")
 PGTABLE = os.getenv("PGTABLE", "llama2_paper")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-small-en")
 EMBED_DIM = int(os.getenv("EMBED_DIM", "384"))

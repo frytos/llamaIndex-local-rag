@@ -503,8 +503,8 @@ class Settings:
     db_name: str = os.getenv("DB_NAME", "vector_db")
     host: str = os.getenv("PGHOST", "localhost")
     port: str = os.getenv("PGPORT", "5432")
-    user: str = os.getenv("PGUSER", "fryt")
-    password: str = os.getenv("PGPASSWORD", "frytos")
+    user: str = os.getenv("PGUSER")
+    password: str = os.getenv("PGPASSWORD")
     table: str = ""  # Will be auto-generated if not set via PGTABLE
 
     # Input

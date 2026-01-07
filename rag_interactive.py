@@ -17,12 +17,15 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import psycopg2
 
+# Import shared utilities
+from utils.naming import extract_model_short_name, generate_table_name, sanitize_table_name
+
 # Database connection settings (match main script defaults)
 DB_CONFIG = {
     "host": os.getenv("PGHOST", "localhost"),
     "port": os.getenv("PGPORT", "5432"),
-    "user": os.getenv("PGUSER", "fryt"),
-    "password": os.getenv("PGPASSWORD", "frytos"),
+    "user": os.getenv("PGUSER"),
+    "password": os.getenv("PGPASSWORD"),
     "dbname": os.getenv("DB_NAME", "vector_db"),
 }
 
@@ -30,23 +33,8 @@ DB_CONFIG = {
 DATA_DIR = Path(__file__).parent / "data"
 
 
-def sanitize_table_name(name: str) -> str:
-    """Sanitize table name by replacing invalid SQL characters.
+# Utility functions now imported from utils.naming
 
-    Args:
-        name: Raw table name (may contain hyphens, spaces, etc.)
-
-    Returns:
-        Sanitized table name safe for SQL (underscores only)
-    """
-    # Replace hyphens and spaces with underscores
-    sanitized = name.replace("-", "_").replace(" ", "_")
-    # Remove any other non-alphanumeric characters except underscores
-    sanitized = "".join(c if c.isalnum() or c == "_" else "_" for c in sanitized)
-    # Ensure it doesn't start with a number
-    if sanitized and sanitized[0].isdigit():
-        sanitized = "t_" + sanitized
-    return sanitized.lower()
 MAIN_SCRIPT = Path(__file__).parent / "rag_low_level_m1_16gb_verbose.py"
 
 
@@ -427,48 +415,7 @@ def select_existing_table() -> Optional[str]:
     return tables[choice - 1][0]
 
 
-def extract_model_short_name(model_name: str) -> str:
-    """Extract a short, readable name from embedding model path."""
-    name = model_name.split('/')[-1]
-    if 'bge' in name.lower():
-        return 'bge'
-    elif 'minilm' in name.lower():
-        return 'minilm'
-    elif 'e5' in name.lower():
-        return 'e5'
-    elif 'mpnet' in name.lower():
-        return 'mpnet'
-    elif 'roberta' in name.lower():
-        return 'roberta'
-    elif 'bert' in name.lower():
-        return 'bert'
-    else:
-        parts = name.lower().replace('sentence-', '').replace('all-', '').split('-')
-        return parts[0][:8]
-
-
-def generate_table_name(doc_path: Path, chunk_size: int, chunk_overlap: int,
-                       embed_model: str = "BAAI/bge-small-en") -> str:
-    """
-    Generate a table name from document and config.
-
-    Format: {doc}_cs{size}_ov{overlap}_{model}_{YYMMDD}
-    """
-    from datetime import datetime
-
-    # Clean document name using sanitize function
-    name = sanitize_table_name(doc_path.stem)
-    # Limit length
-    if len(name) > 30:
-        name = name[:30]
-
-    # Extract short model name
-    model_short = extract_model_short_name(embed_model)
-
-    # Get date in YYMMDD format
-    date_str = datetime.now().strftime("%y%m%d")
-
-    return f"{name}_cs{chunk_size}_ov{chunk_overlap}_{model_short}_{date_str}"
+# Functions extract_model_short_name and generate_table_name now imported from utils.naming
 
 
 def run_indexing(doc_path: Path, table_name: str, chunk_size: int, chunk_overlap: int,
