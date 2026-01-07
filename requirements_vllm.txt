@@ -1,0 +1,5 @@
+# Additional requirements for vLLM GPU backend
+# Install with: pip install -r requirements_vllm.txt
+
+vllm>=0.13.0
+requests>=2.32.0  # For vLLM client health checks

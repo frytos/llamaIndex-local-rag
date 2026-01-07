@@ -58,6 +58,13 @@ try:
 except ImportError:
     VLLM_AVAILABLE = False
 
+# vLLM Server Mode (best performance - no reload between queries)
+try:
+    from vllm_client import build_vllm_client
+    VLLM_CLIENT_AVAILABLE = True
+except ImportError:
+    VLLM_CLIENT_AVAILABLE = False
+
 
 # -----------------------
 # Optional memory logging (nice to have, not required)
@@ -1662,20 +1669,40 @@ def build_llm():
     Retrieval quality is dominated by embedding/chunking/top_k;
     LLM mainly affects answer style + reasoning and speed.
 
-    Supports two backends:
-    - llama.cpp: GGUF models, CPU/GPU (set N_GPU_LAYERS=99 for GPU)
-    - vLLM: HuggingFace models, GPU-optimized (set USE_VLLM=1)
+    Supports three backends (in order of preference):
+    1. vLLM Server (BEST): OpenAI-compatible API, no reload (set USE_VLLM=1)
+    2. vLLM Direct: In-process, reloads each time (set USE_VLLM=1, no server)
+    3. llama.cpp: GGUF models, CPU/GPU (default)
 
     vLLM is 10-20x faster on GPU but requires HuggingFace format models.
     """
     use_vllm = os.getenv("USE_VLLM", "0") == "1"
 
+    # Priority 1: Try vLLM Server Mode (fastest, no reload)
+    if use_vllm and VLLM_CLIENT_AVAILABLE:
+        try:
+            vllm_model = os.getenv("VLLM_MODEL", "TheBloke/Mistral-7B-Instruct-v0.2-AWQ")
+            log.info(f"LLM: vLLM Server Mode ({vllm_model})")
+            log.info(f"LLM params: MAX_TOKENS={S.max_new_tokens} TEMP={S.temperature}")
+            log.info("  🚀 Using vLLM server - ultra-fast queries (no model reload)!")
+
+            llm = build_vllm_client(
+                model=vllm_model,
+                temperature=S.temperature,
+                max_tokens=S.max_new_tokens,
+            )
+            return llm
+        except Exception as e:
+            log.warning(f"vLLM server not available: {e}")
+            log.warning("Falling back to vLLM direct mode (will reload model)...")
+
+    # Priority 2: vLLM Direct Mode (reloads each time, but still GPU-fast)
     if use_vllm and VLLM_AVAILABLE:
-        # vLLM backend (GPU-optimized, 10-20x faster)
         vllm_model = os.getenv("VLLM_MODEL", "TheBloke/Mistral-7B-Instruct-v0.2-AWQ")
-        log.info(f"LLM: vLLM GPU-accelerated ({vllm_model})")
+        log.info(f"LLM: vLLM Direct GPU-accelerated ({vllm_model})")
         log.info(f"LLM params: MAX_LEN={S.context_window} MAX_TOKENS={S.max_new_tokens} TEMP={S.temperature}")
-        log.info("  ⚡ Using vLLM for 10-20x faster inference on GPU!")
+        log.info("  ⚡ Using vLLM direct mode (10-20x faster than CPU)")
+        log.info("  💡 For even faster queries, run vLLM server: ./scripts/start_vllm_server.sh")
 
         llm = build_vllm_llm(
             model_name=vllm_model,
