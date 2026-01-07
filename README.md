@@ -11,8 +11,12 @@ A production-ready Retrieval-Augmented Generation (RAG) system that runs entirel
 - **Multiple Document Formats**: PDF, DOCX, TXT, HTML, and Markdown support
 - **Extensive Logging**: Learn how RAG works with detailed pipeline logging
 - **Docker Integration**: Easy PostgreSQL + pgvector setup
-- **Optimized for Apple Silicon**: Metal GPU acceleration for Mac
+- **Optimized for Apple Silicon**: Metal GPU acceleration for Mac (MLX backend: 5-20x faster)
 - **Cloud Deployment**: RunPod templates for GPU-accelerated inference
+- **🆕 Automated Testing**: 73 tests with pytest framework (11% coverage)
+- **🆕 CI/CD Pipeline**: GitHub Actions for automated quality checks
+- **🆕 Security Hardened**: No hardcoded credentials, vulnerability scanning
+- **🆕 Modular Code**: Shared utilities module for better maintainability
 
 ## Quick Start
 
@@ -39,21 +43,42 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 3. Install dependencies:
 ```bash
+# Core dependencies (required)
 pip install -r requirements.txt
+
+# Optional: Web UI, visualizations, and advanced features
+pip install -r requirements-optional.txt
+
+# Optional: Development tools (testing, linting, etc.)
+pip install -r requirements-dev.txt
 ```
 
 4. Set up environment variables:
 ```bash
-cp config/.env.example .env
-# Edit .env and add your database credentials
+cp .env.example .env
+# Edit .env and add your database credentials:
+#   PGUSER=your_username
+#   PGPASSWORD=your_password
 ```
 
-5. Start PostgreSQL with pgvector:
+**Important:** Never commit `.env` to git! It's already in `.gitignore`.
+
+5. Add your data files:
+```bash
+# Place your documents in the data/ directory
+# The following file types are NOT tracked by git (see .gitignore):
+#   - Large compressed archives (*.tar.gz, *.zip)
+#   - Model files (*.gguf, *.bin)
+#   - All files in data/ directory
+# If sharing the project, provide data files separately or via secure file sharing
+```
+
+6. Start PostgreSQL with pgvector:
 ```bash
 docker-compose -f config/docker-compose.yml up -d
 ```
 
-6. Run the RAG pipeline:
+7. Run the RAG pipeline:
 ```bash
 RESET_TABLE=1 python rag_low_level_m1_16gb_verbose.py
 ```
@@ -322,6 +347,9 @@ llamaIndex-local-rag/
 Install dependencies:
 ```bash
 pip install -r requirements.txt
+
+# If using web UI
+pip install -r requirements-optional.txt
 ```
 
 ### "psycopg2.OperationalError: could not connect to server"

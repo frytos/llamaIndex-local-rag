@@ -1,5 +1,62 @@
-# Additional requirements for vLLM GPU backend
-# Install with: pip install -r requirements_vllm.txt
+# ============================================================================
+# vLLM GPU BACKEND - Optional High-Performance Inference
+# ============================================================================
+# GPU-accelerated LLM inference using vLLM (10-15x faster than llama.cpp CPU).
+#
+# Requirements:
+#   - CUDA 11.8 or higher
+#   - NVIDIA GPU with 8GB+ VRAM (16GB+ recommended)
+#   - Linux or WSL2 (Windows native not supported)
+#
+# Install with: pip install -r config/requirements_vllm.txt
+#
+# Performance (RTX 4090):
+#   - vLLM: ~150 tokens/sec
+#   - llama.cpp CPU: ~10 tokens/sec
+#   - Speedup: 15x
+#
+# Last updated: 2026-01-07
+# ============================================================================
 
-vllm>=0.13.0
-requests>=2.32.0  # For vLLM client health checks
+# ----------------------------------------------------------------------------
+# Core vLLM Package
+# ----------------------------------------------------------------------------
+vllm>=0.13.0                      # GPU-accelerated LLM inference
+
+# ----------------------------------------------------------------------------
+# Supporting Libraries
+# ----------------------------------------------------------------------------
+requests>=2.32.0                  # For vLLM client health checks (already in main requirements)
+
+# ============================================================================
+# USAGE INSTRUCTIONS
+# ============================================================================
+#
+# 1. Install vLLM dependencies:
+#    pip install -r config/requirements_vllm.txt
+#
+# 2. Start vLLM server:
+#    python vllm_client.py
+#    # Or with custom model:
+#    MODEL_PATH=/path/to/model.gguf python vllm_client.py
+#
+# 3. In another terminal, run RAG pipeline:
+#    LLM_BACKEND=vllm python rag_low_level_m1_16gb_verbose.py
+#
+# 4. Monitor GPU usage:
+#    watch -n 1 nvidia-smi
+#
+# ============================================================================
+# DEPLOYMENT OPTIONS
+# ============================================================================
+#
+# RunPod GPU Cloud:
+#   - Pre-configured templates available
+#   - See: docs/RUNPOD_DEPLOYMENT_GUIDE.md
+#   - Config: config/runpod_vllm_config.env
+#
+# Docker Container:
+#   - Use: vllm/vllm-openai:latest image
+#   - Mount models: -v /path/to/models:/models
+#
+# ============================================================================

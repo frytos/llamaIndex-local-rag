@@ -2,10 +2,10 @@
 Cross-encoder reranking for better retrieval quality.
 
 Usage:
-    python reranker.py --test
+    python utils/reranker.py --test
 
     # In your code:
-    from reranker import Reranker
+    from utils.reranker import Reranker
     reranker = Reranker()
     results = reranker.rerank(query, texts, top_n=3)
 """

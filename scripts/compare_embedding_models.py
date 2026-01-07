@@ -38,7 +38,7 @@ def test_embedding_similarity(model_name: str, model_dim: int):
     else:
         # Try MLX first for bge-small-en
         try:
-            from mlx_embedding import MLXEmbedding
+            from utils.mlx_embedding import MLXEmbedding
             model = MLXEmbedding(model_name=model_name)
             backend = "MLX"
         except Exception as e:

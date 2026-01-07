@@ -24,6 +24,7 @@ Utility scripts for deployment, benchmarking, visualization, and data processing
 ## Benchmarking Scripts
 
 - `benchmark_embeddings.py` - Benchmark embedding models
+- `benchmarking_performance_analysis.py` - Comprehensive performance analysis and benchmarking
 - `compare_embedding_models.py` - Compare different embedding models
 - `compare_both_models.sh` - Shell script to compare both BGE and E5
 - `compare_models.py` - Python script for model comparison
@@ -45,7 +46,9 @@ Utility scripts for deployment, benchmarking, visualization, and data processing
 ## System & Database Scripts
 
 - `database_apply_hnsw.sh` - Apply HNSW indexing to PostgreSQL
+- `system_analyze_resources.py` - Analyze system resource usage and bottlenecks
 - `system_free_memory.sh` - Free system memory
+- `system_monitor_memory.py` - Monitor memory usage over time
 - `monitoring_query.sh` - Monitor query performance
 
 ## Configuration Scripts

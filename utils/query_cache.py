@@ -2,7 +2,7 @@
 Query embedding cache to avoid recomputation.
 
 Usage:
-    from query_cache import cache
+    from utils.query_cache import cache
 
     # Check cache first
     embedding = cache.get(query, model_name)

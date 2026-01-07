@@ -1636,7 +1636,7 @@ def build_embed_model():
     # Try MLX backend first if requested
     if backend == "mlx":
         try:
-            from mlx_embedding import MLXEmbedding
+            from utils.mlx_embedding import MLXEmbedding
             log.info(f"Embedding backend: MLX (Apple Silicon Metal GPU)")
             log.info(f"Embedding model: {S.embed_model_name} (dim={S.embed_dim})")
             t = now_ms()
