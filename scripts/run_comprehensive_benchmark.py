@@ -130,6 +130,7 @@ def main():
         "tests/test_performance_regression.py",
         "-v",
         "--tb=short",
+        "--no-cov",  # Disable coverage for benchmarks
         f"--junit-xml={output_dir}/regression-results.xml"
     ]
 
