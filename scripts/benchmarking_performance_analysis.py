@@ -220,14 +220,17 @@ class PerformanceAnalyzer:
             print(f"  • Size: {size_pretty} ({size_mb:.2f} MB)")
 
             # Check for indexes
-            cur.execute(f"""
-                SELECT
-                    indexname,
-                    indexdef
-                FROM pg_indexes
-                WHERE tablename = %s
-                AND indexname LIKE '%%hnsw%%' OR indexname LIKE '%%ivfflat%%';
-            """, (actual_table,))
+            cur.execute(
+                sql.SQL("""
+                    SELECT
+                        indexname,
+                        indexdef
+                    FROM pg_indexes
+                    WHERE tablename = %s
+                    AND indexname LIKE '%%hnsw%%' OR indexname LIKE '%%ivfflat%%';
+                """),
+                (actual_table,)
+            )
             indexes = cur.fetchall()
 
             if indexes:
@@ -260,11 +263,14 @@ class PerformanceAnalyzer:
                 search_times = []
                 for _ in range(10):
                     start = time.perf_counter()
-                    cur.execute(f"""
-                        SELECT * FROM {actual_table}
-                        ORDER BY embedding <=> %s
-                        LIMIT 5;
-                    """, (embedding_str,))
+                    cur.execute(
+                        sql.SQL("""
+                            SELECT * FROM {}
+                            ORDER BY embedding <=> %s
+                            LIMIT 5;
+                        """).format(sql.Identifier(actual_table)),
+                        (embedding_str,)
+                    )
                     cur.fetchall()
                     search_times.append((time.perf_counter() - start) * 1000)
 
