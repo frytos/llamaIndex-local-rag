@@ -35,6 +35,7 @@ from typing import Any, Iterable, List, Optional, Tuple
 # Third-party imports
 import psycopg2
 from psycopg2 import OperationalError as PgOperationalError
+from psycopg2 import sql
 
 try:
     from tqdm import tqdm
@@ -2398,7 +2399,9 @@ def create_hnsw_index(table_name: str = None) -> bool:
                 return True
 
             # Get row count to estimate indexing time
-            cur.execute(f'SELECT COUNT(*) FROM "{actual_table}"')
+            cur.execute(
+                sql.SQL('SELECT COUNT(*) FROM {}').format(sql.Identifier(actual_table))
+            )
             row_count = cur.fetchone()[0]
 
             log.info(f"\n⚙️  Creating HNSW index:")
@@ -2415,12 +2418,14 @@ def create_hnsw_index(table_name: str = None) -> bool:
             # Create the HNSW index
             # m=16: Number of connections per layer (higher = better recall, more memory)
             # ef_construction=64: Build-time search width (higher = better quality, slower build)
-            cur.execute(f'''
-                CREATE INDEX "{index_name}"
-                ON "{actual_table}"
-                USING hnsw (embedding vector_cosine_ops)
-                WITH (m = 16, ef_construction = 64)
-            ''')
+            cur.execute(
+                sql.SQL('''
+                    CREATE INDEX {}
+                    ON {}
+                    USING hnsw (embedding vector_cosine_ops)
+                    WITH (m = 16, ef_construction = 64)
+                ''').format(sql.Identifier(index_name), sql.Identifier(actual_table))
+            )
 
             index_time = dur_s(t)
 
