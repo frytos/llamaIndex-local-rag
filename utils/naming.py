@@ -48,29 +48,26 @@ def extract_model_short_name(model_name: str) -> str:
         >>> extract_model_short_name("sentence-transformers/all-MiniLM-L6-v2")
         'minilm'
     """
-    name = model_name.split('/')[-1]
-    if 'bge' in name.lower():
-        return 'bge'
-    elif 'minilm' in name.lower():
-        return 'minilm'
-    elif 'e5' in name.lower():
-        return 'e5'
-    elif 'mpnet' in name.lower():
-        return 'mpnet'
-    elif 'roberta' in name.lower():
-        return 'roberta'
-    elif 'bert' in name.lower():
-        return 'bert'
+    name = model_name.split("/")[-1]
+    if "bge" in name.lower():
+        return "bge"
+    elif "minilm" in name.lower():
+        return "minilm"
+    elif "e5" in name.lower():
+        return "e5"
+    elif "mpnet" in name.lower():
+        return "mpnet"
+    elif "roberta" in name.lower():
+        return "roberta"
+    elif "bert" in name.lower():
+        return "bert"
     else:
-        parts = name.lower().replace('sentence-', '').replace('all-', '').split('-')
+        parts = name.lower().replace("sentence-", "").replace("all-", "").split("-")
         return parts[0][:8]
 
 
 def generate_table_name(
-    doc_path: Path,
-    chunk_size: int,
-    chunk_overlap: int,
-    embed_model: str = "BAAI/bge-small-en"
+    doc_path: Path, chunk_size: int, chunk_overlap: int, embed_model: str = "BAAI/bge-small-en"
 ) -> str:
     """Generate a table name from document and config.
 

@@ -565,6 +565,17 @@ class Settings:
         "Summarize the key safety-related training ideas described in this paper.",
     )
 
+    def __post_init__(self):
+        """Validate credentials are set after dataclass initialization."""
+        if not self.user or not self.password:
+            raise ValueError(
+                "Database credentials not set!\n"
+                "Required environment variables:\n"
+                "  PGUSER=your_database_user\n"
+                "  PGPASSWORD=your_database_password\n"
+                "Set them in .env file or export them."
+            )
+
     def validate(self) -> None:
         """
         Validate settings and provide helpful error messages.

@@ -68,12 +68,15 @@ llamaIndex-local-rag/
 │   └── *.md                           # Other guides
 │
 ├── scripts/                           # Utility scripts
+│   ├── README.md                      # Scripts documentation
+│   ├── check_dependencies.py          # Dependency checker
 │   ├── start_vllm_server.sh           # Start vLLM server
-│   ├── QUICK_START_OPTIMIZED.sh       # Quick start script
-│   ├── QUICK_START_VLLM.sh            # vLLM quick start
+│   ├── quick_start_optimized.sh       # Quick start script
+│   ├── quick_start_vllm.sh            # vLLM quick start
+│   ├── deploy_runpod.sh               # Deploy to RunPod
 │   ├── tensorboard_embeddings.py      # Embedding visualization
 │   ├── chainlit_app.py                # Alternative chat UI
-│   └── *.py, *.sh                     # Other utilities
+│   └── [other deployment, benchmark, visualization scripts]
 │
 ├── data/                              # Documents to index (gitignored)
 ├── logs/                              # Log files (gitignored)
