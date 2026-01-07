@@ -65,13 +65,11 @@ def build_vllm_client(
         )
 
     # Create OpenAI client pointing to vLLM
-    # Use generic OpenAI model name to bypass LlamaIndex validation
-    # The vLLM server will use its own loaded model regardless
-    # Note: The 'model' param is just for validation, vLLM uses its loaded model
+    # IMPORTANT: Must use the exact model name the vLLM server is serving
     llm = OpenAI(
         api_base=base_url,
-        api_key="dummy",  # vLLM doesn't check
-        model="gpt-3.5-turbo",  # Generic name for LlamaIndex validation
+        api_key="dummy",  # vLLM doesn't check API keys
+        model=model,  # Must match vLLM server's loaded model
         temperature=temperature,
         max_tokens=max_tokens,
     )
