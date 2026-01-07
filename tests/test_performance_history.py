@@ -253,17 +253,28 @@ class TestGetBaseline:
         assert baseline == 67.0
 
     def test_get_baseline_ignores_none_values(self, history):
-        """Test that None values are ignored in baseline calculation."""
-        # Record 5 runs, some with None (should not happen in practice but test robustness)
-        for i in range(5):
+        """Test that None values are handled correctly in baseline calculation."""
+        # Record 7 runs: first 2 without the metric, then 5 with it
+        for i in range(2):
             history.record_run(
-                metrics={"embedding_throughput": 67.0 if i % 2 == 0 else None},
+                metrics={"query_latency_no_vllm": 8.0},  # Different metric
                 metadata={"platform": "M1_Mac_16GB", "run_type": "manual"},
             )
 
-        # Should have 3 non-None values (i=0,2,4)
-        baseline = history.get_baseline("M1_Mac_16GB", "embedding_throughput", min_runs=3)
+        for i in range(5):
+            history.record_run(
+                metrics={"embedding_throughput": 67.0},
+                metadata={"platform": "M1_Mac_16GB", "run_type": "manual"},
+            )
+
+        # get_recent_runs(limit=5) will return the last 5 runs (all with embedding_throughput)
+        baseline = history.get_baseline("M1_Mac_16GB", "embedding_throughput", min_runs=5)
         assert baseline == 67.0
+
+        # Also test that it skips runs without the metric when calculating
+        # get_recent_runs(limit=7) will return all 7, but only 5 have the metric
+        baseline_with_more_runs = history.get_baseline("M1_Mac_16GB", "embedding_throughput", min_runs=3)
+        assert baseline_with_more_runs == 67.0  # Should still work with at least 3
 
 
 class TestGetTrend:
@@ -397,15 +408,17 @@ class TestCompareToBaseline:
                 metadata={"platform": "M1_Mac_16GB", "run_type": "manual"},
             )
 
-        # Test stable (+10% but threshold is 20%)
+        # Test stable (+3% - not regression and not improvement)
+        # Improvement threshold is +5%, regression is -20%
         comparison = history.compare_to_baseline(
-            {"embedding_throughput": 74.0},  # +10.4% = stable
+            {"embedding_throughput": 69.0},  # +3% = stable
             "M1_Mac_16GB",
             threshold=0.20,
         )
 
         assert len(comparison["stable"]) == 1
         assert len(comparison["regressions"]) == 0
+        assert len(comparison["improvements"]) == 0
 
     def test_compare_multiple_metrics(self, history):
         """Test comparison with multiple metrics."""

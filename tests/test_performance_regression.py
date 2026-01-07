@@ -18,10 +18,19 @@ import time
 import os
 import json
 import psutil
+import platform as platform_module
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
+
+# Import performance tracking utilities
+try:
+    from utils.performance_history import PerformanceHistory
+    from utils.platform_detection import detect_platform, get_git_metadata
+    PERFORMANCE_TRACKING_AVAILABLE = True
+except ImportError:
+    PERFORMANCE_TRACKING_AVAILABLE = False
 
 # Test data and baseline metrics
 BASELINE_FILE = Path(__file__).parent / "performance_baselines.json"
@@ -54,11 +63,24 @@ def get_memory_usage_gb() -> float:
     return process.memory_info().rss / (1024 ** 3)
 
 
-def load_baselines() -> Dict[str, float]:
-    """Load baseline performance metrics from file."""
+def load_baselines() -> Dict[str, Any]:
+    """Load baseline performance metrics from file.
+
+    Returns:
+        Dictionary of baselines. If multi-platform format, returns nested dict.
+        If old single-platform format, wraps it for backward compatibility.
+    """
     if BASELINE_FILE.exists():
         with open(BASELINE_FILE, 'r') as f:
-            return json.load(f)
+            data = json.load(f)
+
+        # Check if old format (flat dict with metadata)
+        if "metadata" in data and isinstance(data.get("embedding_throughput"), (int, float)):
+            # Old format - wrap it
+            platform = data.get("metadata", {}).get("platform", "unknown").replace(" ", "_")
+            return {platform: data}
+
+        return data
     return {}
 
 
@@ -90,6 +112,97 @@ def check_regression(current: float, baseline: float, lower_is_better: bool = Tr
         # For metrics like throughput, lower is worse
         change_ratio = (baseline - current) / baseline
         return change_ratio <= THRESHOLDS["regression_tolerance"]
+
+
+# ============================================================================
+# Pytest Fixtures for Performance Tracking
+# ============================================================================
+
+@pytest.fixture(scope="session")
+def performance_recorder():
+    """Fixture to record performance to history database.
+
+    Only creates recorder if ENABLE_PERFORMANCE_RECORDING=1 environment variable is set.
+    """
+    if not PERFORMANCE_TRACKING_AVAILABLE:
+        return None
+
+    if os.getenv("ENABLE_PERFORMANCE_RECORDING") == "1":
+        try:
+            return PerformanceHistory()
+        except Exception as e:
+            print(f"Warning: Could not initialize PerformanceHistory: {e}")
+            return None
+    return None
+
+
+@pytest.fixture(scope="session")
+def platform_info():
+    """Detect platform and load baselines.
+
+    Returns:
+        Dictionary with platform, baselines, git metadata, and availability flags.
+    """
+    if not PERFORMANCE_TRACKING_AVAILABLE:
+        # Fallback when tracking not available
+        baselines_data = load_baselines()
+        # Try to infer platform from data
+        if baselines_data:
+            platform = list(baselines_data.keys())[0]
+        else:
+            platform = "unknown"
+
+        return {
+            "platform": platform,
+            "baselines": baselines_data.get(platform, {}),
+            "has_baselines": bool(baselines_data.get(platform)),
+            "git": {"commit": None, "branch": None},
+            "tracking_available": False
+        }
+
+    # Full tracking available
+    platform = detect_platform()
+    baselines_data = load_baselines()
+    git = get_git_metadata()
+
+    return {
+        "platform": platform,
+        "baselines": baselines_data.get(platform, {}),
+        "has_baselines": platform in baselines_data,
+        "git": git,
+        "tracking_available": True
+    }
+
+
+@pytest.fixture(scope="session", autouse=True)
+def record_session_metrics(request, performance_recorder, platform_info):
+    """Record aggregated metrics at end of test session.
+
+    This fixture collects metrics from individual tests and records them
+    to the performance history database after all tests complete.
+    """
+    # Storage for metrics collected during session
+    session_metrics = {}
+
+    yield session_metrics
+
+    # Record to database if available
+    if performance_recorder and session_metrics:
+        try:
+            performance_recorder.record_run(
+                metrics=session_metrics,
+                metadata={
+                    "platform": platform_info["platform"],
+                    "git_commit": platform_info["git"]["commit"],
+                    "git_branch": platform_info["git"]["branch"],
+                    "python_version": platform_module.python_version(),
+                    "run_type": os.getenv("PERFORMANCE_RUN_TYPE", "manual"),
+                    "notes": "Automated test run"
+                }
+            )
+            print(f"\n✅ Recorded performance metrics to history database")
+        except Exception as e:
+            print(f"\n⚠️ Failed to record performance metrics: {e}")
 
 
 @pytest.mark.slow
