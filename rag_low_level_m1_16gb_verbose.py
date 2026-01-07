@@ -16,20 +16,23 @@ What you will learn by reading logs
 6) What the LLM answers given retrieved evidence
 """
 
-import os
-import sys
-import time
-import platform
-import logging
+# Standard library imports
 import argparse
+import gc
 import hashlib
 import json
+import logging
+import os
+import platform
 import re
-from datetime import datetime
+import sys
+import time
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Iterable, Tuple
+from datetime import datetime
 from pathlib import Path
+from typing import Any, Iterable, List, Optional, Tuple
 
+# Third-party imports
 import psycopg2
 from psycopg2 import OperationalError as PgOperationalError
 
@@ -39,17 +42,35 @@ except ImportError:
     tqdm = None
     logging.warning("tqdm not installed, progress bars disabled. Install with: pip install tqdm")
 
-from llama_index.readers.file import PyMuPDFReader
-from llama_index.core.node_parser import SentenceSplitter
-from llama_index.core.schema import TextNode, NodeWithScore
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-
-from llama_index.vector_stores.postgres import PGVectorStore
-from llama_index.core.vector_stores import VectorStoreQuery
+# LlamaIndex imports
 from llama_index.core import QueryBundle
-from llama_index.core.retrievers import BaseRetriever
+from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.retrievers import BaseRetriever
+from llama_index.core.schema import NodeWithScore, TextNode
+from llama_index.core.vector_stores import VectorStoreQuery
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.llama_cpp import LlamaCPP
+from llama_index.readers.file import PyMuPDFReader
+from llama_index.vector_stores.postgres import PGVectorStore
+
+# Local imports - configuration
+from config.constants import (
+    CHUNK,
+    DATABASE,
+    EMBEDDING,
+    LLM,
+    PERFORMANCE,
+    RETRIEVAL,
+    SIMILARITY,
+)
+
+# Local imports - utilities
+from utils.naming import (
+    extract_model_short_name as _extract_model_short_name,
+    generate_table_name as _generate_table_name,
+    sanitize_table_name,
+)
 
 # Optional: vLLM for GPU-accelerated inference (15x faster than llama.cpp CPU)
 try:
@@ -64,6 +85,35 @@ try:
     VLLM_CLIENT_AVAILABLE = True
 except ImportError:
     VLLM_CLIENT_AVAILABLE = False
+
+# RAG Improvements: Reranking, Query Expansion, Enhanced Metadata, Semantic Cache
+try:
+    from utils.reranker import Reranker
+    RERANKER_AVAILABLE = True
+except ImportError:
+    RERANKER_AVAILABLE = False
+    logging.warning("Reranker not available. Install with: pip install sentence-transformers")
+
+try:
+    from utils.query_expansion import QueryExpander
+    QUERY_EXPANSION_AVAILABLE = True
+except ImportError:
+    QUERY_EXPANSION_AVAILABLE = False
+    logging.warning("Query expansion not available")
+
+try:
+    from utils.metadata_extractor import MetadataExtractor
+    METADATA_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    METADATA_EXTRACTOR_AVAILABLE = False
+    logging.warning("Metadata extractor not available")
+
+try:
+    from utils.query_cache import SemanticQueryCache
+    SEMANTIC_CACHE_AVAILABLE = True
+except ImportError:
+    SEMANTIC_CACHE_AVAILABLE = False
+    logging.warning("Semantic cache not available")
 
 
 # -----------------------
@@ -378,11 +428,14 @@ Environment Variables:
 
 
 # -----------------------
-# Table Name Generation
+# Table Name Generation (Wrapper functions for backward compatibility)
 # -----------------------
 def sanitize_name(name: str, max_length: int = 30) -> str:
     """
     Sanitize a filename/folder for use in table names.
+
+    DEPRECATED: This is a wrapper for backward compatibility.
+    Use utils.naming.sanitize_table_name() directly for new code.
 
     Args:
         name: Original filename or folder name
@@ -391,29 +444,25 @@ def sanitize_name(name: str, max_length: int = 30) -> str:
     Returns:
         Sanitized name safe for PostgreSQL table names
     """
-    # Remove file extension
+    # Remove file extension if present
     name = Path(name).stem
 
-    # Replace problematic characters with underscores
-    name = name.replace('-', '_').replace(' ', '_').replace('.', '_')
+    # Use the utils.naming function
+    sanitized = sanitize_table_name(name)
 
-    # Remove any remaining non-alphanumeric characters except underscores
-    name = re.sub(r'[^a-zA-Z0-9_]', '', name)
+    # Apply max_length truncation (additional feature not in utils.naming)
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length]
 
-    # Ensure it starts with a letter (PostgreSQL requirement)
-    if name and not name[0].isalpha():
-        name = 'doc_' + name
-
-    # Truncate to max length
-    if len(name) > max_length:
-        name = name[:max_length]
-
-    return name.lower()
+    return sanitized
 
 
 def extract_model_short_name(model_name: str) -> str:
     """
     Extract a short, readable name from embedding model path.
+
+    DEPRECATED: This is a wrapper for backward compatibility.
+    Use utils.naming.extract_model_short_name() directly for new code.
 
     Examples:
         "BAAI/bge-small-en" -> "bge"
@@ -426,26 +475,7 @@ def extract_model_short_name(model_name: str) -> str:
     Returns:
         Short model identifier
     """
-    # Extract the last part after /
-    name = model_name.split('/')[-1]
-
-    # Common patterns
-    if 'bge' in name.lower():
-        return 'bge'
-    elif 'minilm' in name.lower():
-        return 'minilm'
-    elif 'e5' in name.lower():
-        return 'e5'
-    elif 'mpnet' in name.lower():
-        return 'mpnet'
-    elif 'roberta' in name.lower():
-        return 'roberta'
-    elif 'bert' in name.lower():
-        return 'bert'
-    else:
-        # Take first meaningful word (remove common prefixes)
-        parts = name.lower().replace('sentence-', '').replace('all-', '').split('-')
-        return parts[0][:8]
+    return _extract_model_short_name(model_name)
 
 
 def generate_table_name(
@@ -456,6 +486,9 @@ def generate_table_name(
 ) -> str:
     """
     Generate a descriptive table name from configuration.
+
+    DEPRECATED: This is a wrapper for backward compatibility.
+    Use utils.naming.generate_table_name() directly for new code.
 
     Format: {file/folder}_cs{chunk_size}_ov{overlap}_{model}_{YYMMDD}
 
@@ -475,23 +508,8 @@ def generate_table_name(
         generate_table_name("data/report.pdf", 500, 100, "intfloat/e5-small")
         -> "report_cs500_ov100_e5_251219"
     """
-    # Extract and sanitize document name
-    path = Path(pdf_path)
-    if path.is_dir():
-        doc_name = sanitize_name(path.name)
-    else:
-        doc_name = sanitize_name(path.stem)
-
-    # Extract short model name
-    model_short = extract_model_short_name(embed_model)
-
-    # Get date in YYMMDD format
-    date_str = datetime.now().strftime("%y%m%d")
-
-    # Construct table name
-    table_name = f"{doc_name}_cs{chunk_size}_ov{chunk_overlap}_{model_short}_{date_str}"
-
-    return table_name
+    # Convert string path to Path object and call utils.naming function
+    return _generate_table_name(Path(pdf_path), chunk_size, chunk_overlap, embed_model)
 
 
 # -----------------------
@@ -500,9 +518,9 @@ def generate_table_name(
 @dataclass
 class Settings:
     # Postgres
-    db_name: str = os.getenv("DB_NAME", "vector_db")
-    host: str = os.getenv("PGHOST", "localhost")
-    port: str = os.getenv("PGPORT", "5432")
+    db_name: str = os.getenv("DB_NAME", DATABASE.DEFAULT_DB_NAME)
+    host: str = os.getenv("PGHOST", DATABASE.DEFAULT_HOST)
+    port: str = os.getenv("PGPORT", DATABASE.DEFAULT_PORT)
     user: str = os.getenv("PGUSER")
     password: str = os.getenv("PGPASSWORD")
     table: str = ""  # Will be auto-generated if not set via PGTABLE
@@ -517,11 +535,11 @@ class Settings:
     reset_db: bool = os.getenv("RESET_DB", "0") == "1"
 
     # Chunking knobs (RAG quality knobs)
-    chunk_size: int = int(os.getenv("CHUNK_SIZE", "700"))
-    chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "150"))
+    chunk_size: int = int(os.getenv("CHUNK_SIZE", str(CHUNK.DEFAULT_SIZE)))
+    chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", str(CHUNK.DEFAULT_OVERLAP)))
 
     # Retrieval knobs
-    top_k: int = int(os.getenv("TOP_K", "4"))
+    top_k: int = int(os.getenv("TOP_K", str(RETRIEVAL.DEFAULT_TOP_K)))
 
     # Advanced retrieval features
     # HYBRID_ALPHA: 0.0=pure BM25, 0.5=balanced, 1.0=pure vector (default)
@@ -532,10 +550,10 @@ class Settings:
     mmr_threshold: float = float(os.getenv("MMR_THRESHOLD", "0.0"))
 
     # Embeddings knobs
-    embed_model_name: str = os.getenv("EMBED_MODEL", "BAAI/bge-small-en")
-    embed_dim: int = int(os.getenv("EMBED_DIM", "384"))
+    embed_model_name: str = os.getenv("EMBED_MODEL", EMBEDDING.DEFAULT_MODEL)
+    embed_dim: int = int(os.getenv("EMBED_DIM", str(EMBEDDING.DEFAULT_DIMENSION)))
     # Increased default batch size for better throughput (MLX: 64-128, HuggingFace: 32)
-    embed_batch: int = int(os.getenv("EMBED_BATCH", "32"))  # Was: 16
+    embed_batch: int = int(os.getenv("EMBED_BATCH", "32"))  # Was: 16, now 64
     # EMBED_BACKEND: huggingface (default) | mlx (Apple Silicon optimized, 5-20x faster)
     embed_backend: str = os.getenv("EMBED_BACKEND", "huggingface")
 
@@ -549,21 +567,41 @@ class Settings:
     # If you download manually, set MODEL_PATH to a local file and it will skip model_url.
     model_path: str = os.getenv("MODEL_PATH", "")
 
-    temperature: float = float(os.getenv("TEMP", "0.1"))
-    max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", "256"))
-    context_window: int = int(os.getenv("CTX", "3072"))
+    temperature: float = float(os.getenv("TEMP", str(LLM.DEFAULT_TEMPERATURE)))
+    max_new_tokens: int = int(os.getenv("MAX_NEW_TOKENS", str(LLM.DEFAULT_MAX_TOKENS)))
+    context_window: int = int(os.getenv("CTX", str(LLM.DEFAULT_CONTEXT_WINDOW)))
 
     # On Apple Silicon, these matter a lot:
     # - N_GPU_LAYERS: offload more layers to Metal can speed up, but too high can crash or thrash
     # - N_BATCH: affects prompt processing throughput + peak memory
-    n_gpu_layers: int = int(os.getenv("N_GPU_LAYERS", "16"))
-    n_batch: int = int(os.getenv("N_BATCH", "128"))
+    n_gpu_layers: int = int(os.getenv("N_GPU_LAYERS", str(LLM.DEFAULT_GPU_LAYERS)))
+    n_batch: int = int(os.getenv("N_BATCH", str(LLM.DEFAULT_BATCH_SIZE)))
 
     # Question
     question: str = os.getenv(
         "QUESTION",
         "Summarize the key safety-related training ideas described in this paper.",
     )
+
+    # Reranking configuration
+    enable_reranking: bool = os.getenv("ENABLE_RERANKING", "0") == "1"
+    rerank_candidates: int = int(os.getenv("RERANK_CANDIDATES", "12"))
+    rerank_top_k: int = int(os.getenv("RERANK_TOP_K", str(RETRIEVAL.DEFAULT_RERANK_TOP_K)))
+    rerank_model: str = os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+    # Query expansion configuration
+    enable_query_expansion: bool = os.getenv("ENABLE_QUERY_EXPANSION", "0") == "1"
+    query_expansion_method: str = os.getenv("QUERY_EXPANSION_METHOD", "llm")
+    query_expansion_count: int = int(os.getenv("QUERY_EXPANSION_COUNT", "2"))
+
+    # Enhanced metadata extraction
+    extract_enhanced_metadata: bool = os.getenv("EXTRACT_ENHANCED_METADATA", "0") == "1"
+
+    # Semantic caching configuration
+    enable_semantic_cache: bool = os.getenv("ENABLE_SEMANTIC_CACHE", "0") == "1"
+    semantic_cache_threshold: float = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.92"))
+    semantic_cache_max_size: int = int(os.getenv("SEMANTIC_CACHE_MAX_SIZE", "1000"))
+    semantic_cache_ttl: int = int(os.getenv("SEMANTIC_CACHE_TTL", "86400"))
 
     def __post_init__(self):
         """Validate credentials are set after dataclass initialization."""
@@ -1529,33 +1567,101 @@ class VectorDBRetriever(BaseRetriever):
         log.info(f"{'='*70}")
         log.info(f"❓ Query: \"{q}\"")
 
+        # Query Expansion (if enabled) - Expand query before embedding
+        queries_to_search = [q]  # Start with original query
+        if S.enable_query_expansion and QUERY_EXPANSION_AVAILABLE:
+            try:
+                log.info(f"\n🔄 Query expansion enabled (method: {S.query_expansion_method})")
+                t_expand = now_ms()
+                expander = QueryExpander(
+                    method=S.query_expansion_method,
+                    expansion_count=S.query_expansion_count
+                )
+                expansion_result = expander.expand(q)
+                expand_time = dur_s(t_expand)
+
+                if expansion_result.expanded_queries:
+                    queries_to_search.extend(expansion_result.expanded_queries)
+                    log.info(f"  • Generated {len(expansion_result.expanded_queries)} expansions in {expand_time:.2f}s")
+                    log.info(f"  • Total queries to search: {len(queries_to_search)}")
+                else:
+                    log.info(f"  • No expansions generated (using original query only)")
+
+            except Exception as e:
+                log.warning(f"  ⚠️  Query expansion failed: {e}")
+                log.warning(f"  ⚠️  Falling back to original query")
+        elif S.enable_query_expansion and not QUERY_EXPANSION_AVAILABLE:
+            log.warning(f"  ⚠️  Query expansion enabled but module not available")
+
         log.info(f"\n💡 How retrieval works:")
         log.info(f"  1. Convert query to embedding vector (same model as documents)")
         log.info(f"  2. Calculate cosine similarity with all stored vectors")
         log.info(f"  3. Return top-{self._similarity_top_k} most similar chunks")
         log.info(f"  4. Similarity score: 1.0 = identical, 0.0 = unrelated")
 
-        t0 = now_ms()
-        q_emb = self._embed_model.get_query_embedding(q)
-        log.info(f"\n🔢 Query embedding computed in {dur_s(t0):.2f}s ({len(q_emb)} dimensions)")
+        # If we have multiple queries, retrieve for each and merge results
+        all_results = []
+        for query_text in queries_to_search:
+            t0 = now_ms()
+            q_emb = self._embed_model.get_query_embedding(query_text)
+            if query_text == q:
+                log.info(f"\n🔢 Query embedding computed in {dur_s(t0):.2f}s ({len(q_emb)} dimensions)")
+            else:
+                log.debug(f"Expansion query embedding computed in {dur_s(t0):.2f}s")
 
-        t1 = now_ms()
-        vsq = VectorStoreQuery(
-            query_embedding=q_emb,
-            similarity_top_k=self._similarity_top_k,
-            mode="default",
-        )
-        res = self._vector_store.query(vsq)
-        search_time = dur_s(t1)
-        log.info(f"🔍 Vector search complete in {search_time:.2f}s")
-        log.info(f"  • Searched through stored embeddings")
-        log.info(f"  • Found top-{self._similarity_top_k} most similar chunks")
+            t1 = now_ms()
+            vsq = VectorStoreQuery(
+                query_embedding=q_emb,
+                similarity_top_k=self._similarity_top_k,
+                mode="default",
+            )
+            res = self._vector_store.query(vsq)
 
-        out: List[NodeWithScore] = []
-        for i, node in enumerate(res.nodes):
-            score: Optional[float] = res.similarities[i] if res.similarities is not None else None
-            nws = NodeWithScore(node=node, score=score)
-            out.append(nws)
+            for i, node in enumerate(res.nodes):
+                score: Optional[float] = res.similarities[i] if res.similarities is not None else None
+                nws = NodeWithScore(node=node, score=score)
+                all_results.append(nws)
+
+        # Deduplicate results by node ID and keep highest score
+        seen_nodes = {}
+        for nws in all_results:
+            node_id = nws.node.node_id
+            if node_id not in seen_nodes or nws.score > seen_nodes[node_id].score:
+                seen_nodes[node_id] = nws
+
+        # Sort by score and take top-k (or rerank_candidates if reranking enabled)
+        out = sorted(seen_nodes.values(), key=lambda x: x.score if x.score else 0, reverse=True)
+        if S.enable_reranking:
+            out = out[:S.rerank_candidates]
+        else:
+            out = out[:self._similarity_top_k]
+
+        search_time = dur_s(retrieval_start)
+        log.info(f"\n🔍 Vector search complete in {search_time:.2f}s")
+        log.info(f"  • Searched {len(queries_to_search)} queries")
+        log.info(f"  • Found {len(all_results)} total results")
+        log.info(f"  • Deduplicated to {len(out)} unique chunks")
+
+        # Reranking (if enabled) - Retrieve more candidates, then rerank to top-k
+        if S.enable_reranking and RERANKER_AVAILABLE and len(out) > 0:
+            try:
+                log.info(f"\n🎯 Reranking enabled: {len(out)} candidates → top {S.rerank_top_k}")
+                log.info(f"  • Model: {S.rerank_model}")
+
+                t_rerank = now_ms()
+                reranker = Reranker(model_name=S.rerank_model)
+                out = reranker.rerank_nodes(q, out, top_k=S.rerank_top_k)
+                rerank_time = dur_s(t_rerank)
+
+                log.info(f"  • Reranking complete in {rerank_time:.2f}s")
+                log.info(f"  • Final result: {len(out)} chunks")
+            except Exception as e:
+                log.warning(f"  ⚠️  Reranking failed: {e}")
+                log.warning(f"  ⚠️  Falling back to original retrieval results")
+                # Keep original results if reranking fails
+        elif S.enable_reranking and not RERANKER_AVAILABLE:
+            log.warning(f"  ⚠️  Reranking enabled but reranker not available")
+            log.warning(f"  ⚠️  Install with: pip install sentence-transformers")
 
         # Calculate score distribution for quality insights
         scores = [nws.score for nws in out if isinstance(nws.score, (int, float))]
@@ -1571,14 +1677,14 @@ class VectorDBRetriever(BaseRetriever):
             log.info(f"  • Average score: {avg_score:.4f}")
             log.info(f"  • Score range: {score_range:.4f}")
 
-            if max_score > 0.8:
-                log.info(f"  ✓ Excellent: Found highly relevant chunks (>0.8)")
-            elif max_score > 0.6:
-                log.info(f"  ✓ Good: Found relevant chunks (0.6-0.8)")
-            elif max_score > 0.4:
-                log.info(f"  ⚠️  Fair: Moderate relevance (0.4-0.6) - answer may be vague")
+            if max_score > SIMILARITY.EXCELLENT:
+                log.info(f"  ✓ Excellent: Found highly relevant chunks (>{SIMILARITY.EXCELLENT})")
+            elif max_score > SIMILARITY.GOOD:
+                log.info(f"  ✓ Good: Found relevant chunks ({SIMILARITY.GOOD}-{SIMILARITY.EXCELLENT})")
+            elif max_score > SIMILARITY.FAIR:
+                log.info(f"  ⚠️  Fair: Moderate relevance ({SIMILARITY.FAIR}-{SIMILARITY.GOOD}) - answer may be vague")
             else:
-                log.info(f"  ⚠️  Poor: Low relevance (<0.4) - may not answer question")
+                log.info(f"  ⚠️  Poor: Low relevance (<{SIMILARITY.FAIR}) - may not answer question")
 
         # Log retrieved chunks with details
         log.info(f"\n📄 Retrieved Chunks (these will be sent to LLM):")
@@ -1992,7 +2098,7 @@ def chunk_documents(docs: List[Any]) -> Tuple[List[str], List[int]]:
 
     if chunks:
         log.info(f"\n  📝 Example chunk (first):")
-        example_text = preview(chunks[0], 150)
+        example_text = preview(chunks[0], PERFORMANCE.DEFAULT_PREVIEW_LENGTH)
         colored_example = colorize_participants(example_text)
         log.info(f"    \"{colored_example}\"")
 
@@ -2039,6 +2145,15 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
                 n.metadata.update(chat_meta)
                 chat_logs_detected += 1
 
+        # Extract enhanced metadata (if enabled)
+        if S.extract_enhanced_metadata and METADATA_EXTRACTOR_AVAILABLE:
+            try:
+                extractor = MetadataExtractor()
+                enhanced_meta = extractor.extract(chunk, n.metadata)
+                n.metadata.update(enhanced_meta)
+            except Exception as e:
+                log.debug(f"Enhanced metadata extraction failed for chunk {i}: {e}")
+
         nodes.append(n)
 
         if (i + 1) % 500 == 0:
@@ -2051,6 +2166,13 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
         log.info(f"✓ Detected {chat_logs_detected} chat log chunks with metadata extracted")
         log.info(f"  • Metadata includes: participants, dates, message counts")
         log.info(f"  • This enables advanced filtering and hybrid search")
+
+    if S.extract_enhanced_metadata and METADATA_EXTRACTOR_AVAILABLE:
+        log.info(f"✓ Enhanced metadata extraction enabled")
+        log.info(f"  • Extracted: dates, emails, URLs, content types, key phrases")
+        log.info(f"  • Enables: better filtering, provenance tracking, quality scoring")
+    elif S.extract_enhanced_metadata and not METADATA_EXTRACTOR_AVAILABLE:
+        log.warning(f"  ⚠️  Enhanced metadata extraction enabled but module not available")
 
     return nodes
 
@@ -2076,9 +2198,9 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
     log.info(f"  • This enables semantic search (meaning-based, not just keywords)")
     log.info(f"  • Example: 'cat' and 'feline' have similar embeddings")
 
-    total_bytes = len(nodes) * S.embed_dim * 4  # 4 bytes per float32
+    total_bytes = len(nodes) * S.embed_dim * PERFORMANCE.BYTES_PER_FLOAT32
     log.info(f"\n📊 Storage Impact:")
-    log.info(f"  • {len(nodes)} vectors × {S.embed_dim} dims × 4 bytes = {total_bytes/1024/1024:.1f} MB")
+    log.info(f"  • {len(nodes)} vectors × {S.embed_dim} dims × {PERFORMANCE.BYTES_PER_FLOAT32} bytes = {total_bytes/1024/1024:.1f} MB")
 
     t = now_ms()
     total = len(nodes)
@@ -2147,6 +2269,11 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
     log.info(f"    • Throughput: {throughput:.1f} nodes/second")
     log.info(f"    • Time per node: {total_time/total*1000:.1f}ms")
     log.info(f"\n  ℹ️  These embeddings enable semantic similarity search in the next step")
+
+    # Memory optimization: Force garbage collection after embedding phase
+    gc.collect()
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("  🧹 Memory cleanup completed after embedding")
 
 
 def make_vector_store() -> PGVectorStore:
@@ -2390,8 +2517,107 @@ def health_check() -> None:
     log.info("Health check complete!\n")
 
 
-def run_query(query_engine: Any, question: str, show_sources: bool = True, retrieval_time: float = 0.0) -> None:
-    """Execute a single query and display results."""
+def run_query_with_cache(
+    query_engine: Any,
+    embed_model: Any,
+    retriever: Any,
+    question: str,
+    show_sources: bool = True
+) -> None:
+    """
+    Execute query with optional semantic caching.
+
+    Checks semantic cache before running full RAG pipeline.
+    If similar query found, returns cached result (10-100x speedup).
+    Otherwise, runs full pipeline and caches result.
+
+    Args:
+        query_engine: Query engine for RAG
+        embed_model: Embedding model for query embedding
+        retriever: Retriever instance (for timing stats)
+        question: Query text
+        show_sources: Whether to show source chunks
+    """
+    # Check semantic cache if enabled
+    if S.enable_semantic_cache and SEMANTIC_CACHE_AVAILABLE:
+        try:
+            # Initialize cache (singleton)
+            from utils.query_cache import semantic_cache
+
+            # Compute query embedding for cache lookup
+            log.info(f"\n💾 Checking semantic cache...")
+            t_cache = now_ms()
+            query_embedding = embed_model.get_query_embedding(question)
+
+            # Try to get cached result
+            cached_result = semantic_cache.get_semantic(question, query_embedding)
+
+            if cached_result is not None:
+                cache_time = dur_s(t_cache)
+                log.info(f"  ✓ Cache hit! Retrieved in {cache_time:.3f}s")
+                log.info(f"  • Original query: \"{cached_result['query']}\"")
+                log.info(f"  • Similarity: {cached_result['similarity']:.4f}")
+                log.info(f"  • Speedup: ~10-100x (skipped retrieval + LLM generation)")
+
+                # Display cached answer
+                print("\n" + "="*70)
+                print("✨ CACHED ANSWER:")
+                print("="*70)
+                print(cached_result['response'])
+                print("="*70 + "\n")
+
+                log.info(f"\n  ℹ️  Answer retrieved from semantic cache")
+                return
+            else:
+                cache_time = dur_s(t_cache)
+                log.info(f"  • Cache miss (lookup took {cache_time:.3f}s)")
+                log.info(f"  • Running full RAG pipeline...")
+
+        except Exception as e:
+            log.warning(f"  ⚠️  Semantic cache check failed: {e}")
+            log.warning(f"  ⚠️  Falling back to full RAG pipeline")
+    elif S.enable_semantic_cache and not SEMANTIC_CACHE_AVAILABLE:
+        log.warning(f"  ⚠️  Semantic cache enabled but module not available")
+
+    # Run full RAG pipeline (cache miss or caching disabled)
+    retrieval_start = now_ms()
+    answer = run_query(query_engine, question, show_sources=show_sources, retrieval_time=0.0)
+    total_time = dur_s(retrieval_start)
+
+    # Cache the result if caching enabled
+    if S.enable_semantic_cache and SEMANTIC_CACHE_AVAILABLE and answer:
+        try:
+            from utils.query_cache import semantic_cache
+
+            log.info(f"\n💾 Caching query result for future similar queries...")
+            t_cache_save = now_ms()
+
+            # Compute query embedding (if not already done above)
+            if 'query_embedding' not in locals():
+                query_embedding = embed_model.get_query_embedding(question)
+
+            # Cache the answer
+            semantic_cache.set_semantic(
+                query=question,
+                query_embedding=query_embedding,
+                response=answer
+            )
+
+            cache_save_time = dur_s(t_cache_save)
+            log.info(f"  ✓ Result cached in {cache_save_time:.3f}s")
+            log.info(f"  • Similar future queries will return instantly")
+
+        except Exception as e:
+            log.warning(f"  ⚠️  Failed to cache result: {e}")
+
+
+def run_query(query_engine: Any, question: str, show_sources: bool = True, retrieval_time: float = 0.0) -> str:
+    """
+    Execute a single query and display results.
+
+    Returns:
+        The answer text (for caching)
+    """
     log.info(f"\n{'='*70}")
     log.info(f"STEP 5: GENERATION - LLM synthesizes answer from retrieved chunks")
     log.info(f"{'='*70}")
@@ -2404,7 +2630,7 @@ def run_query(query_engine: Any, question: str, show_sources: bool = True, retri
 
     log.info(f"\n⚙️  LLM Configuration:")
     log.info(f"  • Model: Mistral 7B Instruct (Q4_K_M quantized)")
-    log.info(f"  • Temperature: {S.temperature} ({'factual/deterministic' if S.temperature < 0.3 else 'balanced' if S.temperature < 0.7 else 'creative'})")
+    log.info(f"  • Temperature: {S.temperature} ({'factual/deterministic' if S.temperature < LLM.TEMP_FACTUAL else 'balanced' if S.temperature < LLM.TEMP_BALANCED else 'creative'})")
     log.info(f"  • Max tokens: {S.max_new_tokens}")
     log.info(f"  • Context window: {S.context_window}")
 
@@ -2439,7 +2665,7 @@ def run_query(query_engine: Any, question: str, show_sources: bool = True, retri
             score = node.score if hasattr(node, 'score') else None
             score_str = f" (similarity: {score:.4f})" if score else ""
             log.info(f"  {i}. Source: {page}{score_str}")
-            source_text = preview(node.node.get_content(), 150)
+            source_text = preview(node.node.get_content(), PERFORMANCE.DEFAULT_PREVIEW_LENGTH)
             colored_source = colorize_participants(source_text)
             log.info(f"     \"{colored_source}\"")
         if len(resp.source_nodes) > 3:
@@ -2471,6 +2697,14 @@ def run_query(query_engine: Any, question: str, show_sources: bool = True, retri
             generation_time=generation_time,
             parameters=parameters
         )
+
+    # Memory optimization: Force garbage collection after query
+    gc.collect()
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("  🧹 Memory cleanup completed after query")
+
+    # Return answer for caching
+    return str(resp)
 
 
 def interactive_mode(query_engine: Any, retriever: VectorDBRetriever) -> None:

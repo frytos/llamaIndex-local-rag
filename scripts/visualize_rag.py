@@ -48,7 +48,8 @@ def load_retrieval_log(log_file: str) -> Dict[str, Any]:
                         data['chunks'].append(text[:200] + '...' if len(text) > 200 else text)
                         data['scores'].append(score)
                         data['sources'].append(source)
-                except:
+                except (IndexError, ValueError, KeyError) as e:
+                    # Skip malformed log entries
                     continue
 
         # Extract answer

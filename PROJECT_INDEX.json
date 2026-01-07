@@ -1,0 +1,714 @@
+{
+  "project": {
+    "name": "llamaIndex-local-rag",
+    "type": "Local RAG Pipeline",
+    "language": "Python",
+    "version": "2.0.0",
+    "description": "Production-ready local Retrieval-Augmented Generation system optimized for Apple Silicon and NVIDIA GPUs",
+    "generated": "2026-01-07",
+    "repository_health": 76.3,
+    "license": "MIT"
+  },
+  "entry_points": [
+    {
+      "file": "rag_low_level_m1_16gb_verbose.py",
+      "purpose": "Main RAG pipeline",
+      "command": "python rag_low_level_m1_16gb_verbose.py",
+      "type": "cli",
+      "primary": true
+    },
+    {
+      "file": "rag_interactive.py",
+      "purpose": "CLI menu system",
+      "command": "python rag_interactive.py",
+      "type": "cli",
+      "primary": true
+    },
+    {
+      "file": "rag_web.py",
+      "purpose": "Streamlit web UI",
+      "command": "streamlit run rag_web.py",
+      "type": "web",
+      "primary": true
+    },
+    {
+      "file": "rag_minimal_local.py",
+      "purpose": "Lightweight file-based RAG (no database)",
+      "command": "python rag_minimal_local.py",
+      "type": "cli",
+      "primary": false
+    },
+    {
+      "file": "tests/",
+      "purpose": "Test suite",
+      "command": "pytest tests/",
+      "type": "test",
+      "primary": true
+    }
+  ],
+  "structure": {
+    "core_pipeline": {
+      "path": "./",
+      "files": 7,
+      "total_lines": 4939,
+      "files_list": [
+        "rag_low_level_m1_16gb_verbose.py",
+        "rag_interactive.py",
+        "rag_web.py",
+        "rag_minimal_local.py",
+        "vllm_client.py",
+        "vllm_wrapper.py",
+        "setup.py"
+      ]
+    },
+    "utils": {
+      "path": "utils/",
+      "files": 5,
+      "files_list": [
+        "query_cache.py",
+        "reranker.py",
+        "naming.py",
+        "mlx_embedding.py",
+        "__init__.py"
+      ]
+    },
+    "tests": {
+      "path": "tests/",
+      "files": 16,
+      "total_lines": 5436,
+      "coverage_percent": 30.94
+    },
+    "scripts": {
+      "path": "scripts/",
+      "files": 35,
+      "categories": [
+        "deployment",
+        "benchmarking",
+        "visualization",
+        "data_processing",
+        "system_utilities"
+      ]
+    },
+    "config": {
+      "path": "config/",
+      "files": 10,
+      "includes": [
+        ".env.example",
+        "docker-compose.yml",
+        "pytest.ini",
+        "requirements_vllm.txt"
+      ]
+    },
+    "docs": {
+      "path": "docs/",
+      "files": 25,
+      "categories": [
+        "getting_started",
+        "setup_configuration",
+        "deployment",
+        "performance_optimization",
+        "features_tools",
+        "quality_organization"
+      ]
+    }
+  },
+  "core_modules": {
+    "document_processing": {
+      "supported_formats": ["pdf", "docx", "txt", "html", "markdown"],
+      "chunking": {
+        "method": "SentenceSplitter",
+        "configurable": true,
+        "default_chunk_size": 700,
+        "default_overlap": 150
+      },
+      "metadata": ["document_source", "page_numbers", "timestamps"]
+    },
+    "embedding_generation": {
+      "models": [
+        "BAAI/bge-small-en",
+        "intfloat/multilingual-e5-small",
+        "sentence-transformers/all-MiniLM-L6-v2"
+      ],
+      "backends": ["cpu", "metal", "cuda", "mlx"],
+      "batch_processing": true,
+      "default_model": "BAAI/bge-small-en",
+      "default_dimension": 384
+    },
+    "vector_storage": {
+      "database": "PostgreSQL",
+      "extension": "pgvector",
+      "indexing": "HNSW",
+      "operations": ["insert", "query", "metadata_filtering"]
+    },
+    "llm_inference": {
+      "local_backends": ["llama.cpp", "vLLM"],
+      "model_formats": ["GGUF", "AWQ"],
+      "default_model": "Mistral 7B Instruct",
+      "acceleration": ["metal", "cuda", "cpu"]
+    },
+    "query_retrieval": {
+      "method": "vector_similarity_search",
+      "similarity_metric": "cosine",
+      "reranking": true,
+      "caching": true,
+      "default_top_k": 4
+    }
+  },
+  "configuration": {
+    "database": {
+      "DB_NAME": {
+        "type": "string",
+        "default": "vector_db",
+        "description": "PostgreSQL database name"
+      },
+      "PGHOST": {
+        "type": "string",
+        "default": "localhost",
+        "description": "Database host"
+      },
+      "PGPORT": {
+        "type": "integer",
+        "default": 5432,
+        "description": "Database port"
+      },
+      "PGUSER": {
+        "type": "string",
+        "required": true,
+        "description": "Database user"
+      },
+      "PGPASSWORD": {
+        "type": "string",
+        "required": true,
+        "sensitive": true,
+        "description": "Database password"
+      },
+      "PGTABLE": {
+        "type": "string",
+        "default": "llama2_paper",
+        "description": "Table name for vectors"
+      }
+    },
+    "document": {
+      "PDF_PATH": {
+        "type": "string",
+        "default": "data/llama2.pdf",
+        "description": "Path to file or folder to index"
+      },
+      "RESET_TABLE": {
+        "type": "integer",
+        "default": 0,
+        "options": [0, 1],
+        "description": "Drop table before indexing"
+      },
+      "RESET_DB": {
+        "type": "integer",
+        "default": 0,
+        "options": [0, 1],
+        "warning": "USE WITH CAUTION",
+        "description": "Drop entire database"
+      }
+    },
+    "rag_quality": {
+      "CHUNK_SIZE": {
+        "type": "integer",
+        "default": 700,
+        "range": [100, 2000],
+        "description": "Characters per chunk"
+      },
+      "CHUNK_OVERLAP": {
+        "type": "integer",
+        "default": 150,
+        "description": "Character overlap between chunks"
+      },
+      "TOP_K": {
+        "type": "integer",
+        "default": 4,
+        "range": [1, 10],
+        "description": "Number of chunks to retrieve"
+      }
+    },
+    "embedding": {
+      "EMBED_MODEL": {
+        "type": "string",
+        "default": "BAAI/bge-small-en",
+        "description": "HuggingFace embedding model"
+      },
+      "EMBED_DIM": {
+        "type": "integer",
+        "default": 384,
+        "options": [384, 512, 768, 1024],
+        "description": "Embedding dimension"
+      },
+      "EMBED_BATCH": {
+        "type": "integer",
+        "default": 64,
+        "description": "Batch size for embedding"
+      }
+    },
+    "llm": {
+      "MODEL_PATH": {
+        "type": "string",
+        "optional": true,
+        "description": "Local GGUF model path"
+      },
+      "MODEL_URL": {
+        "type": "string",
+        "optional": true,
+        "description": "URL to download GGUF model"
+      },
+      "CTX": {
+        "type": "integer",
+        "default": 3072,
+        "description": "Context window size"
+      },
+      "MAX_NEW_TOKENS": {
+        "type": "integer",
+        "default": 256,
+        "description": "Maximum tokens in answer"
+      },
+      "TEMP": {
+        "type": "float",
+        "default": 0.1,
+        "range": [0.0, 1.0],
+        "description": "Temperature"
+      },
+      "N_GPU_LAYERS": {
+        "type": "integer",
+        "default": 24,
+        "description": "Layers offloaded to GPU"
+      },
+      "N_BATCH": {
+        "type": "integer",
+        "default": 256,
+        "description": "Batch size for LLM"
+      }
+    }
+  },
+  "dependencies": {
+    "core_framework": {
+      "llama-index": "0.14.10",
+      "llama-index-core": "0.14.10",
+      "llama_cpp_python": "0.3.16"
+    },
+    "ml_embeddings": {
+      "sentence-transformers": "5.2.0",
+      "torch": "2.9.1",
+      "transformers": "4.57.3",
+      "tokenizers": "0.22.1"
+    },
+    "database": {
+      "psycopg2-binary": "2.9.11",
+      "pgvector": "0.4.2",
+      "SQLAlchemy": "2.0.45",
+      "asyncpg": "0.31.0"
+    },
+    "document_processing": {
+      "PyMuPDF": "1.26.7",
+      "pypdf": "6.4.2",
+      "python-docx": "1.2.0",
+      "beautifulsoup4": "4.14.3"
+    },
+    "utilities": {
+      "pandas": "2.2.3",
+      "numpy": "2.3.5",
+      "scipy": "1.16.3",
+      "python-dotenv": "1.2.1"
+    },
+    "optional_web": {
+      "streamlit": "latest",
+      "plotly": "latest"
+    },
+    "optional_dev": {
+      "pytest": "8.3.6",
+      "black": "latest",
+      "ruff": "latest",
+      "mypy": "latest"
+    }
+  },
+  "documentation": {
+    "getting_started": [
+      {
+        "file": "README.md",
+        "title": "Main project documentation",
+        "audience": "all"
+      },
+      {
+        "file": "CLAUDE.md",
+        "title": "Developer guide",
+        "audience": "developers"
+      },
+      {
+        "file": "docs/START_HERE.md",
+        "title": "Quick start guide",
+        "audience": "beginners"
+      },
+      {
+        "file": "CONTRIBUTING.md",
+        "title": "Contribution guidelines",
+        "audience": "contributors"
+      }
+    ],
+    "setup_configuration": [
+      {
+        "file": "docs/ENVIRONMENT_VARIABLES.md",
+        "title": "Complete config reference"
+      },
+      {
+        "file": "docs/INTERACTIVE_GUIDE.md",
+        "title": "Interactive mode usage"
+      },
+      {
+        "file": "config/README.md",
+        "title": "Configuration files guide"
+      }
+    ],
+    "deployment": [
+      {
+        "file": "docs/RUNPOD_FINAL_SETUP.md",
+        "title": "RunPod deployment",
+        "status": "archived"
+      },
+      {
+        "file": "docs/VLLM_SERVER_GUIDE.md",
+        "title": "vLLM GPU server setup"
+      }
+    ],
+    "performance_optimization": [
+      {
+        "file": "docs/RAG_OPTIMIZATION_GUIDE.md",
+        "title": "RAG quality tuning"
+      },
+      {
+        "file": "docs/PERFORMANCE_ANALYSIS_REPORT.md",
+        "title": "Benchmarking results"
+      },
+      {
+        "file": "docs/SCALABILITY_ANALYSIS.md",
+        "title": "Scaling guidelines"
+      },
+      {
+        "file": "docs/CHUNK_SIZE_MANAGEMENT.md",
+        "title": "Chunk configuration"
+      }
+    ],
+    "features_tools": [
+      {
+        "file": "docs/VISUALIZATION_GUIDE.md",
+        "title": "Embedding visualization"
+      },
+      {
+        "file": "docs/CHAINLIT_GUIDE.md",
+        "title": "Alternative chat UI"
+      },
+      {
+        "file": "docs/QUERY_LOGGING_GUIDE.md",
+        "title": "Query logging system"
+      },
+      {
+        "file": "docs/ADVANCED_RETRIEVAL.md",
+        "title": "Advanced retrieval techniques"
+      }
+    ],
+    "quality_organization": [
+      {
+        "file": "docs/AUDIT_EXECUTIVE_SUMMARY.md",
+        "title": "Repository audit"
+      },
+      {
+        "file": "SECURITY_AUDIT.md",
+        "title": "Security review"
+      },
+      {
+        "file": "REPOSITORY_ORGANIZATION.md",
+        "title": "Project structure"
+      },
+      {
+        "file": "docs/AGENTS.md",
+        "title": "Claude agents documentation"
+      }
+    ]
+  },
+  "testing": {
+    "framework": "pytest",
+    "coverage_percent": 30.94,
+    "total_files": 16,
+    "total_lines": 5436,
+    "command": "pytest tests/ -v",
+    "test_suites": [
+      {
+        "file": "test_chunking.py",
+        "purpose": "Document chunking logic"
+      },
+      {
+        "file": "test_embedding.py",
+        "purpose": "Embedding generation"
+      },
+      {
+        "file": "test_llm_config.py",
+        "purpose": "LLM configuration"
+      },
+      {
+        "file": "test_retrieval.py",
+        "purpose": "Vector retrieval"
+      },
+      {
+        "file": "test_performance.py",
+        "purpose": "Performance benchmarks"
+      },
+      {
+        "file": "test_performance_regression.py",
+        "purpose": "Regression tests",
+        "lines": 537
+      },
+      {
+        "file": "test_property_based.py",
+        "purpose": "Property-based testing",
+        "lines": 562
+      },
+      {
+        "file": "test_embedding_llm_integration.py",
+        "purpose": "Integration tests"
+      },
+      {
+        "file": "test_e2e_pipeline.py",
+        "purpose": "End-to-end tests"
+      },
+      {
+        "file": "test_database.py",
+        "purpose": "Database operations"
+      },
+      {
+        "file": "test_database_integration.py",
+        "purpose": "Database integration"
+      },
+      {
+        "file": "test_fixtures.py",
+        "purpose": "Test fixtures"
+      },
+      {
+        "file": "test_naming_utils.py",
+        "purpose": "Naming utilities"
+      },
+      {
+        "file": "test_config.py",
+        "purpose": "Configuration loading"
+      }
+    ]
+  },
+  "performance_benchmarks": {
+    "platform": "M1 Mac Mini 16GB",
+    "metrics": [
+      {
+        "operation": "Load 1000 HTML files",
+        "time": "40s",
+        "throughput": "25 files/s"
+      },
+      {
+        "operation": "Chunk 1000 docs",
+        "time": "6s",
+        "throughput": "166 docs/s"
+      },
+      {
+        "operation": "Embed 10000 chunks",
+        "time": "150s",
+        "throughput": "67 chunks/s"
+      },
+      {
+        "operation": "Insert 10000 nodes",
+        "time": "8s",
+        "throughput": "1250 nodes/s"
+      },
+      {
+        "operation": "Query (retrieval)",
+        "time": "0.3s",
+        "throughput": null
+      },
+      {
+        "operation": "Query (generation)",
+        "time": "5-15s",
+        "throughput": "~10 tokens/s"
+      }
+    ]
+  },
+  "commands": {
+    "claude_skills": [
+      {
+        "command": "/run-rag",
+        "description": "Run RAG pipeline with parameters"
+      },
+      {
+        "command": "/optimize-rag",
+        "description": "Analyze and suggest optimizations"
+      },
+      {
+        "command": "/audit-index",
+        "description": "Check index health and consistency"
+      },
+      {
+        "command": "/compare-chunks",
+        "description": "Compare different chunk configurations"
+      },
+      {
+        "command": "/web-ui",
+        "description": "Launch Streamlit web interface"
+      },
+      {
+        "command": "/review-pr",
+        "description": "Review pull request"
+      },
+      {
+        "command": "/tdd-feature",
+        "description": "Build feature using TDD"
+      },
+      {
+        "command": "/parallel-test",
+        "description": "Run tests in parallel"
+      },
+      {
+        "command": "/document-feature",
+        "description": "Generate feature documentation"
+      },
+      {
+        "command": "/search-and-refactor",
+        "description": "Find and refactor patterns"
+      },
+      {
+        "command": "/comprehensive-audit",
+        "description": "Full codebase audit"
+      }
+    ],
+    "common_tasks": {
+      "indexing": [
+        {
+          "description": "Index PDF",
+          "command": "PDF_PATH=data/doc.pdf PGTABLE=my_doc RESET_TABLE=1 python rag_low_level_m1_16gb_verbose.py"
+        },
+        {
+          "description": "Index folder",
+          "command": "PDF_PATH=data/documents/ PGTABLE=docs RESET_TABLE=1 python rag_low_level_m1_16gb_verbose.py"
+        },
+        {
+          "description": "Custom chunk configuration",
+          "command": "CHUNK_SIZE=500 CHUNK_OVERLAP=100 PDF_PATH=data/doc.pdf python rag_low_level_m1_16gb_verbose.py"
+        }
+      ],
+      "querying": [
+        {
+          "description": "Interactive mode",
+          "command": "python rag_low_level_m1_16gb_verbose.py --query-only --interactive"
+        },
+        {
+          "description": "Single query",
+          "command": "python rag_low_level_m1_16gb_verbose.py --query \"What are the key findings?\""
+        },
+        {
+          "description": "Query specific table",
+          "command": "PGTABLE=my_doc python rag_low_level_m1_16gb_verbose.py --query-only"
+        }
+      ],
+      "testing": [
+        {
+          "description": "Run all tests",
+          "command": "pytest tests/ -v"
+        },
+        {
+          "description": "Run specific test",
+          "command": "pytest tests/test_embedding.py -v"
+        },
+        {
+          "description": "Coverage report",
+          "command": "pytest tests/ --cov=. --cov-report=html"
+        }
+      ],
+      "performance": [
+        {
+          "description": "Benchmark embeddings",
+          "command": "python scripts/benchmark_embeddings.py"
+        },
+        {
+          "description": "Performance analysis",
+          "command": "python scripts/benchmarking_performance_analysis.py"
+        },
+        {
+          "description": "Compare models",
+          "command": "python scripts/compare_embedding_models.py"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "deployment": [
+      "deploy_runpod.sh",
+      "runpod_startup.sh",
+      "runpod_startup_verbose.sh",
+      "verify_runpod_setup.sh",
+      "start_vllm_server.sh",
+      "vllm_server_control.sh",
+      "quick_start_vllm.sh",
+      "quick_start_optimized.sh"
+    ],
+    "indexing": [
+      "index_bge_small.sh",
+      "index_multilingual_e5.sh"
+    ],
+    "benchmarking": [
+      "benchmark_embeddings.py",
+      "benchmarking_performance_analysis.py",
+      "compare_embedding_models.py",
+      "compare_both_models.sh",
+      "compare_models.py",
+      "test_query_quality.sh"
+    ],
+    "visualization": [
+      "tensorboard_embeddings.py",
+      "tensorboard_multi.py",
+      "atlas_embeddings.py",
+      "visualize_rag.py",
+      "chainlit_app.py"
+    ],
+    "data_processing": [
+      "clean_messenger_html.py",
+      "clean_instagram_json.py"
+    ],
+    "system_database": [
+      "database_apply_hnsw.sh",
+      "system_analyze_resources.py",
+      "system_free_memory.sh",
+      "system_monitor_memory.py",
+      "monitoring_query.sh"
+    ],
+    "configuration": [
+      "config_optimized.sh",
+      "helper_quick_commands.sh"
+    ],
+    "validation": [
+      "validate_repo_organization.py",
+      "validate_setup.py",
+      "check_dependencies.py",
+      "verify_references.py"
+    ]
+  },
+  "security": {
+    "best_practices": [
+      "No hardcoded credentials (use .env)",
+      ".gitignore excludes sensitive files",
+      "Input validation on user queries",
+      "SQL injection prevention (parameterized queries)",
+      "Secure database connections",
+      "Dependency vulnerability scanning"
+    ],
+    "warnings": [
+      "Keep .env file private (never commit)",
+      "Use RESET_DB=1 with extreme caution"
+    ]
+  },
+  "metadata": {
+    "index_size_kb": 4.5,
+    "token_reduction_percent": 94,
+    "files_indexed": 100,
+    "documentation_files": 25,
+    "test_files": 16,
+    "script_files": 35,
+    "last_updated": "2026-01-07"
+  }
+}

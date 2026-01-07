@@ -185,6 +185,7 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
+    "--cov-fail-under=30",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -201,12 +202,13 @@ filterwarnings = [
 source = ["."]
 omit = [
     ".venv/*",
-    "*/tests/*",
-    "*/test_*.py",
+    "tests/*",           # Exclude all test files from coverage
+    "test_*.py",         # Exclude test files anywhere
     "*/__pycache__/*",
     "archive/*",
     "scripts/*",
     "setup.py",
+    "*/conftest.py",     # Exclude pytest fixtures
 ]
 
 [tool.coverage.report]
@@ -221,6 +223,7 @@ exclude_lines = [
 ]
 precision = 2
 show_missing = true
+fail_under = 30.0  # Updated from 3% to 30% to match current coverage
 
 # Bandit - Security Linting
 [tool.bandit]

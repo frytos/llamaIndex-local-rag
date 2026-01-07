@@ -9,6 +9,13 @@
 # For development: pip install -r requirements-dev.txt
 # For vLLM GPU backend: pip install -r config/requirements_vllm.txt
 #
+# Feature Flags:
+#   - Reranking: requires sentence-transformers
+#   - Semantic caching: requires scikit-learn
+#   - Query expansion: requires nltk
+#   - Metadata extraction: requires nltk, scikit-learn
+#   - MLX embeddings (M1 Mac): requires mlx (install from requirements-optional.txt)
+#
 # Last updated: 2026-01-07
 # Python: 3.11+
 # ============================================================================
@@ -36,14 +43,15 @@ llama_cpp_python==0.3.16          # Local LLM inference (llama.cpp)
 
 # ----------------------------------------------------------------------------
 # Embeddings & Machine Learning
+# (Used for embeddings, reranking, semantic cache, query expansion, metadata)
 # ----------------------------------------------------------------------------
-sentence-transformers==5.2.0      # Semantic embeddings
+sentence-transformers==5.2.0      # Semantic embeddings (core); also used by reranker
 torch==2.9.1                      # PyTorch (required for embeddings)
 transformers==4.57.3              # HuggingFace transformers
 tokenizers==0.22.1                # Fast tokenizers
 safetensors==0.7.0                # Safe tensor storage
 huggingface-hub==0.36.0           # Model hub client
-scikit-learn==1.8.0               # ML utilities (cosine similarity, etc.)
+scikit-learn==1.8.0               # ML utilities (cosine similarity for reranking, semantic cache)
 scipy==1.16.3                     # Scientific computing
 numpy==2.3.5                      # Numerical operations
 
@@ -68,13 +76,14 @@ defusedxml==0.7.1                 # Secure XML parsing
 
 # ----------------------------------------------------------------------------
 # Data Processing & Utilities
+# (nltk used for query expansion, metadata extraction, semantic caching)
 # ----------------------------------------------------------------------------
 pandas==2.2.3                     # Data manipulation
 python-dateutil==2.9.0.post0      # Date/time utilities
 pytz==2025.2                      # Timezone support
 tzdata==2025.3                    # Timezone data
 regex==2025.11.3                  # Advanced regex
-nltk==3.9.2                       # Natural language processing
+nltk==3.9.2                       # Natural language processing (query expansion, metadata)
 joblib==1.5.3                     # Parallel processing utilities
 threadpoolctl==3.6.0              # Thread pool control
 

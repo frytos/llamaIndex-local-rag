@@ -42,6 +42,7 @@ from rag_low_level_m1_16gb_verbose import (
 # Database connection for direct queries
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2 import sql
 
 # For embedding visualization
 from sklearn.manifold import TSNE
@@ -149,7 +150,7 @@ def test_db_connection() -> Tuple[bool, str]:
         if conn:
             try:
                 conn.close()
-            except:
+            except Exception:
                 pass
         return False, str(e)
 
@@ -176,26 +177,30 @@ def list_vector_tables() -> List[Dict[str, Any]]:
 
             # Get row count
             try:
-                cur.execute(f'SELECT COUNT(*) FROM "{table}"')
+                cur.execute(
+                    sql.SQL('SELECT COUNT(*) FROM {}').format(sql.Identifier(table))
+                )
                 info["rows"] = cur.fetchone()["count"]
-            except Exception:
+            except Exception as e:
                 conn.rollback()
                 continue
 
             # Try to get metadata from first row
             try:
-                cur.execute(f"""
-                    SELECT metadata_->>'_chunk_size' as cs,
-                           metadata_->>'_chunk_overlap' as co
-                    FROM "{table}"
-                    WHERE metadata_->>'_chunk_size' IS NOT NULL
-                    LIMIT 1
-                """)
+                cur.execute(
+                    sql.SQL("""
+                        SELECT metadata_->>'_chunk_size' as cs,
+                               metadata_->>'_chunk_overlap' as co
+                        FROM {}
+                        WHERE metadata_->>'_chunk_size' IS NOT NULL
+                        LIMIT 1
+                    """).format(sql.Identifier(table))
+                )
                 row = cur.fetchone()
                 if row:
                     info["chunk_size"] = row["cs"] or "?"
                     info["chunk_overlap"] = row["co"] or "?"
-            except Exception:
+            except Exception as e:
                 pass  # Metadata query failed, keep defaults
 
             result.append(info)
@@ -207,7 +212,7 @@ def list_vector_tables() -> List[Dict[str, Any]]:
         if conn:
             try:
                 conn.close()
-            except:
+            except Exception:
                 pass
         st.error(f"Error listing tables: {e}")
         return []
@@ -218,7 +223,9 @@ def delete_table(table_name: str) -> bool:
     try:
         conn = get_db_connection(autocommit=True)
         cur = conn.cursor()
-        cur.execute(f'DROP TABLE IF EXISTS "{table_name}" CASCADE')
+        cur.execute(
+            sql.SQL('DROP TABLE IF EXISTS {} CASCADE').format(sql.Identifier(table_name))
+        )
         cur.close()
         conn.close()
         return True
@@ -226,7 +233,7 @@ def delete_table(table_name: str) -> bool:
         if conn:
             try:
                 conn.close()
-            except:
+            except Exception:
                 pass
         st.error(f"Error deleting table: {e}")
         return False
@@ -238,11 +245,14 @@ def fetch_embeddings_for_viz(table_name: str, limit: int = 500) -> Tuple[np.ndar
         conn = get_db_connection(autocommit=True)
         cur = conn.cursor()
 
-        cur.execute(f"""
-            SELECT embedding, text, metadata_->>'source' as source
-            FROM "{table_name}"
-            LIMIT %s
-        """, (limit,))
+        cur.execute(
+            sql.SQL("""
+                SELECT embedding, text, metadata_->>'source' as source
+                FROM {}
+                LIMIT %s
+            """).format(sql.Identifier(table_name)),
+            (limit,)
+        )
 
         rows = cur.fetchall()
         cur.close()
@@ -258,11 +268,18 @@ def fetch_embeddings_for_viz(table_name: str, limit: int = 500) -> Tuple[np.ndar
             if isinstance(emb, str):
                 # Parse string like "[-0.08, 0.03, ...]" or "[...]"
                 import json
+                import ast
                 try:
                     emb = json.loads(emb)
-                except:
-                    # Try eval as fallback (for numpy repr)
-                    emb = eval(emb.replace('np.str_', '').replace('(', '').replace(')', ''))
+                except (json.JSONDecodeError, ValueError):
+                    # Try ast.literal_eval as safe fallback
+                    try:
+                        # Clean up numpy representation
+                        cleaned = emb.replace('np.str_', '').replace('(', '').replace(')', '')
+                        emb = ast.literal_eval(cleaned)
+                    except (ValueError, SyntaxError) as e:
+                        st.warning(f"Failed to parse embedding: {e}")
+                        continue
             embeddings_list.append(emb)
 
         embeddings = np.array(embeddings_list, dtype=np.float32)
@@ -274,7 +291,7 @@ def fetch_embeddings_for_viz(table_name: str, limit: int = 500) -> Tuple[np.ndar
         if conn:
             try:
                 conn.close()
-            except:
+            except Exception:
                 pass
         st.error(f"Error fetching embeddings: {e}")
         return np.array([]), [], []
@@ -591,12 +608,14 @@ def run_indexing(doc_path: Path, table_name: str, chunk_size: int, chunk_overlap
                 try:
                     conn = get_db_connection()
                     cur = conn.cursor()
-                    cur.execute(f'DROP TABLE IF EXISTS "{table_name}" CASCADE')
+                    cur.execute(
+                        sql.SQL('DROP TABLE IF EXISTS {} CASCADE').format(sql.Identifier(table_name))
+                    )
                     conn.commit()
                     cur.close()
                     conn.close()
-                except:
-                    pass
+                except Exception as e:
+                    pass  # Table might not exist
 
             vector_store = make_vector_store()
 
@@ -930,7 +949,7 @@ def main():
     try:
         indexes = list_vector_tables()
         st.sidebar.metric("Indexes", len(indexes))
-    except:
+    except Exception:
         st.sidebar.metric("Indexes", "?")
 
     st.sidebar.caption(f"DB: {st.session_state.db_name}")

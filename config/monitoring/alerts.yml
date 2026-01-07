@@ -1,0 +1,278 @@
+# Alert Rules for Local RAG Pipeline
+# Critical alerts for operations team
+
+groups:
+  # ==================== Database Alerts ====================
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # Database down
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "PostgreSQL instance has been down for more than 1 minute. All RAG queries will fail."
+          impact: "Complete service outage"
+          action: "Check database logs and restart: docker-compose restart db"
+
+      # High connection usage
+      - alert: PostgreSQLHighConnections
+        expr: |
+          (pg_stat_database_numbackends{datname="vector_db"} / pg_settings_max_connections) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "PostgreSQL connection usage high"
+          description: "Database connections at {{ $value | humanizePercentage }}. May impact query performance."
+          action: "Review active connections and connection pooling configuration"
+
+      # Long-running queries
+      - alert: PostgreSQLLongRunningQueries
+        expr: |
+          pg_stat_activity_max_tx_duration{datname="vector_db"} > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Long-running database queries detected"
+          description: "Query running for {{ $value }}s in vector_db database"
+          action: "Check pg_stat_activity for blocking queries"
+
+      # Database size growth
+      - alert: PostgreSQLDatabaseSizeGrowth
+        expr: |
+          rate(pg_database_size_bytes{datname="vector_db"}[1h]) > 1073741824
+        for: 15m
+        labels:
+          severity: info
+          component: database
+        annotations:
+          summary: "Database growing rapidly"
+          description: "Database growing at {{ $value | humanize1024 }}/hour"
+          action: "Review indexing operations and cleanup old embeddings if needed"
+
+  # ==================== RAG Application Alerts ====================
+  - name: rag_application_alerts
+    interval: 30s
+    rules:
+      # High error rate
+      - alert: RAGHighErrorRate
+        expr: |
+          rate(rag_query_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: rag-application
+        annotations:
+          summary: "RAG application error rate high"
+          description: "Error rate at {{ $value | humanizePercentage }} over last 5 minutes"
+          impact: "Users experiencing query failures"
+          action: "Check application logs: tail -f logs/*.log"
+
+      # High query latency
+      - alert: RAGHighLatency
+        expr: |
+          histogram_quantile(0.95, rate(rag_query_duration_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: rag-application
+        annotations:
+          summary: "RAG query latency high"
+          description: "P95 query latency is {{ $value }}s (threshold: 10s)"
+          impact: "Degraded user experience"
+          action: "Check database query performance and LLM inference time"
+
+      # Embedding failures
+      - alert: RAGEmbeddingFailures
+        expr: |
+          rate(rag_embedding_errors_total[10m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: rag-application
+        annotations:
+          summary: "Embedding generation failures detected"
+          description: "Embedding error rate: {{ $value | humanizePercentage }}"
+          action: "Check embedding model availability and GPU/CPU resources"
+
+      # Low retrieval quality
+      - alert: RAGLowRetrievalScores
+        expr: |
+          avg_over_time(rag_retrieval_score_avg[15m]) < 0.5
+        for: 10m
+        labels:
+          severity: info
+          component: rag-application
+        annotations:
+          summary: "Low average retrieval similarity scores"
+          description: "Average retrieval score: {{ $value }} (expected > 0.5)"
+          action: "Review chunk configuration and consider re-indexing with better parameters"
+
+      # Cache miss rate high
+      - alert: RAGCacheMissRateHigh
+        expr: |
+          (rate(rag_cache_misses_total[10m]) / rate(rag_cache_requests_total[10m])) > 0.8
+        for: 15m
+        labels:
+          severity: info
+          component: rag-application
+        annotations:
+          summary: "Query cache ineffective"
+          description: "Cache miss rate: {{ $value | humanizePercentage }}"
+          action: "Review query patterns and cache configuration"
+
+  # ==================== Backup Alerts ====================
+  - name: backup_alerts
+    interval: 1h
+    rules:
+      # Backup failed
+      - alert: BackupFailed
+        expr: |
+          rag_backup_success == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: backup
+        annotations:
+          summary: "Database backup failed"
+          description: "Last backup attempt failed. Data loss risk if database fails."
+          impact: "No recovery point available"
+          action: "Check backup logs: tail -f logs/backup_*.log"
+
+      # Backup stale
+      - alert: BackupStale
+        expr: |
+          (time() - rag_backup_last_success_timestamp) > 172800
+        for: 1h
+        labels:
+          severity: warning
+          component: backup
+        annotations:
+          summary: "No successful backup in 48 hours"
+          description: "Last successful backup: {{ $value | humanizeDuration }} ago"
+          action: "Run manual backup: ./scripts/backup/backup_postgres.sh"
+
+      # Backup storage low
+      - alert: BackupStorageLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/backups"} / node_filesystem_size_bytes{mountpoint="/backups"}) < 0.2
+        for: 30m
+        labels:
+          severity: warning
+          component: backup
+        annotations:
+          summary: "Backup storage running low"
+          description: "Only {{ $value | humanizePercentage }} storage available for backups"
+          action: "Clean old backups or increase storage"
+
+  # ==================== System Resource Alerts ====================
+  - name: system_resource_alerts
+    interval: 30s
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: |
+          (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage at {{ $value | humanize }}%"
+          impact: "Performance degradation possible"
+          action: "Check running processes and consider scaling"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage at {{ $value | humanize }}%"
+          impact: "Risk of OOM kills"
+          action: "Free memory or increase available RAM"
+
+      # Disk space low
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 15m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Disk space critically low"
+          description: "Only {{ $value | humanizePercentage }} disk space available"
+          impact: "Database writes may fail"
+          action: "Clean up logs, old backups, or add storage"
+
+      # High disk I/O wait
+      - alert: HighDiskIOWait
+        expr: |
+          rate(node_cpu_seconds_total{mode="iowait"}[5m]) * 100 > 20
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High disk I/O wait time"
+          description: "I/O wait at {{ $value | humanize }}%"
+          impact: "Database query slowdown"
+          action: "Check disk performance and query patterns"
+
+  # ==================== Container Alerts ====================
+  - name: container_alerts
+    interval: 30s
+    rules:
+      # Container down
+      - alert: ContainerDown
+        expr: |
+          up{job=~"postgres|rag-app"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: container
+        annotations:
+          summary: "Critical container down"
+          description: "Container {{ $labels.job }} is not responding"
+          impact: "Service unavailable"
+          action: "Restart container: docker-compose restart {{ $labels.job }}"
+
+      # Container restarting
+      - alert: ContainerRestarting
+        expr: |
+          rate(container_last_seen{name=~"rag_.*"}[5m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: container
+        annotations:
+          summary: "Container restarting frequently"
+          description: "Container {{ $labels.name }} restarting {{ $value }} times/min"
+          action: "Check container logs: docker logs {{ $labels.name }}"
+
+      # High container memory
+      - alert: ContainerHighMemory
+        expr: |
+          (container_memory_usage_bytes{name=~"rag_.*"} / container_spec_memory_limit_bytes{name=~"rag_.*"}) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          component: container
+        annotations:
+          summary: "Container memory usage high"
+          description: "Container {{ $labels.name }} using {{ $value | humanizePercentage }} of limit"
+          action: "Increase memory limit or optimize application"

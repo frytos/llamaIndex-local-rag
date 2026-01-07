@@ -160,66 +160,112 @@ open -a "Activity Monitor"
 
 ---
 
+## Performance Presets
+
+Quick-start configurations for common use cases. Copy-paste and adjust as needed.
+
 ## Configuration Templates
 
 Copy-paste these configurations for common scenarios:
 
-### Fast Queries (Optimize for Speed)
+### Preset 1: Fast M1 (Speed Optimized for M1 Mac 16GB)
 ```bash
-export USE_VLLM=1              # vLLM server mode
-export MAX_NEW_TOKENS=128      # Shorter answers
-export TOP_K=3                 # Fewer chunks
-export CHUNK_SIZE=500          # Smaller chunks
-export TEMPERATURE=0.1         # Factual
+# vLLM for fast queries
+export USE_VLLM=1
+export MAX_NEW_TOKENS=128
+export TOP_K=3
+export CHUNK_SIZE=500
+export TEMPERATURE=0.1
+
+# Optimized batch sizes for M1
+export EMBED_BATCH=128
+export N_GPU_LAYERS=24
+export DB_INSERT_BATCH=500
 
 # Run query
 python rag_low_level_m1_16gb_verbose.py --query "your question"
 ```
-**Result:** 2-3s queries, concise answers
+**Performance:**
+- Query: 2-3s (with vLLM)
+- Indexing: 90-100 chunks/sec
+- Memory: 10-12GB
+- Use case: Interactive demos, quick testing
 
 ---
 
-### High Quality (Optimize for Accuracy)
+### Preset 2: Quality (Accuracy Optimized)
 ```bash
-export USE_VLLM=1              # vLLM server (recommended)
-export MAX_NEW_TOKENS=512      # Longer answers
-export TOP_K=6                 # More context
-export CHUNK_SIZE=1000         # Larger chunks
-export CHUNK_OVERLAP=200       # More overlap
-export TEMPERATURE=0.3         # Slightly creative
+# Quality-first settings
+export USE_VLLM=1
+export MAX_NEW_TOKENS=512
+export TOP_K=6
+export CHUNK_SIZE=1000
+export CHUNK_OVERLAP=200
+export TEMPERATURE=0.3
+
+# Balanced batch sizes
+export EMBED_BATCH=96
+export N_GPU_LAYERS=24
+export DB_INSERT_BATCH=250
 
 # Run query
 python rag_low_level_m1_16gb_verbose.py --query "your question"
 ```
-**Result:** 5-8s queries (with vLLM), comprehensive answers
+**Performance:**
+- Query: 5-8s (with vLLM)
+- Answer quality: Comprehensive, detailed
+- Memory: 11-13GB
+- Use case: Research, detailed analysis
 
 ---
 
-### Fast Indexing (Optimize for Throughput)
+### Preset 3: Balanced (All-Around Performance)
 ```bash
-export EMBED_BATCH=128         # Larger batches
-export DB_INSERT_BATCH=500     # Bulk inserts
-export CHUNK_SIZE=700          # Balanced
-export CHUNK_OVERLAP=150       # Standard
+# Default recommended settings
+export USE_VLLM=1
+export MAX_NEW_TOKENS=256
+export TOP_K=4
+export CHUNK_SIZE=700
+export CHUNK_OVERLAP=150
+export TEMPERATURE=0.1
 
-# Run indexing
+# Optimized batch sizes
+export EMBED_BATCH=128
+export N_GPU_LAYERS=24
+export DB_INSERT_BATCH=500
+
+# Run pipeline
 python rag_low_level_m1_16gb_verbose.py
 ```
-**Result:** 90-100 chunks/sec, ~1.7 min for 10k chunks
+**Performance:**
+- Query: 3-5s (with vLLM)
+- Indexing: 90-100 chunks/sec
+- Memory: 10-12GB
+- Use case: Production deployments, everyday use
 
 ---
 
-### Low Memory (Optimize for Stability)
+### Preset 4: Low Memory (Stability Optimized)
 ```bash
-export EMBED_BATCH=32          # Small batches
-export DB_INSERT_BATCH=100     # Small inserts
-export N_GPU_LAYERS=0          # CPU only (or reduce to 12)
-export MAX_NEW_TOKENS=128      # Short answers
+# Conservative settings for 8GB systems
+export USE_VLLM=0  # Use llama.cpp instead
+export EMBED_BATCH=32
+export DB_INSERT_BATCH=100
+export N_GPU_LAYERS=12  # Reduce GPU usage
+export MAX_NEW_TOKENS=128
+
+# Smaller chunks and context
+export CHUNK_SIZE=600
+export TOP_K=3
+export CTX=2048
 
 # Run with memory constraints
 python rag_low_level_m1_16gb_verbose.py
 ```
-**Result:** 4-6GB memory usage, stable performance
+**Performance:**
+- Query: 10-15s (llama.cpp)
+- Memory: 4-6GB (stable)
+- Use case: 8GB systems, background services
 
 ---
 

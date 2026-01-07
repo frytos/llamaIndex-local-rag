@@ -192,7 +192,10 @@ class PerformanceAnalyzer:
                 return {"error": "Table not found"}
 
             # Row count
-            cur.execute(f"SELECT COUNT(*) FROM {actual_table};")
+            from psycopg2 import sql
+            cur.execute(
+                sql.SQL("SELECT COUNT(*) FROM {};").format(sql.Identifier(actual_table))
+            )
             row_count = cur.fetchone()[0]
             self.metrics.row_count = row_count
             results["row_count"] = row_count
@@ -200,14 +203,16 @@ class PerformanceAnalyzer:
             print(f"  • Rows: {row_count:,}")
 
             # Table size
-            cur.execute(f"""
-                SELECT pg_size_pretty(pg_total_relation_size('{actual_table}'));
-            """)
+            cur.execute(
+                sql.SQL("SELECT pg_size_pretty(pg_total_relation_size(%s));"),
+                (actual_table,)
+            )
             size_pretty = cur.fetchone()[0]
 
-            cur.execute(f"""
-                SELECT pg_total_relation_size('{actual_table}') / (1024.0 * 1024.0);
-            """)
+            cur.execute(
+                sql.SQL("SELECT pg_total_relation_size(%s) / (1024.0 * 1024.0);"),
+                (actual_table,)
+            )
             size_mb = cur.fetchone()[0]
             self.metrics.table_size_mb = size_mb
             results["table_size"] = size_pretty
@@ -243,7 +248,9 @@ class PerformanceAnalyzer:
 
             # Benchmark vector search speed
             print("\n  Testing vector search performance...")
-            cur.execute(f"SELECT embedding FROM {actual_table} LIMIT 1;")
+            cur.execute(
+                sql.SQL("SELECT embedding FROM {} LIMIT 1;").format(sql.Identifier(actual_table))
+            )
             sample_embedding = cur.fetchone()
 
             if sample_embedding and sample_embedding[0]:

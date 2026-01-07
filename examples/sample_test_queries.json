@@ -1,0 +1,162 @@
+[
+  {
+    "id": "q1",
+    "query": "What is retrieval-augmented generation?",
+    "ground_truth_answer": "Retrieval-augmented generation (RAG) is a technique that combines information retrieval with text generation. It retrieves relevant documents from a knowledge base and uses them as context for generating accurate, grounded responses.",
+    "relevant_doc_ids": ["doc_rag_intro", "doc_rag_architecture", "doc_rag_benefits"],
+    "expected_keywords": ["retrieval", "generation", "documents", "context", "knowledge base"],
+    "category": "definition"
+  },
+  {
+    "id": "q2",
+    "query": "How do embeddings work in semantic search?",
+    "ground_truth_answer": "Embeddings convert text into dense vector representations that capture semantic meaning. In semantic search, query and document embeddings are compared using similarity metrics like cosine similarity to find the most relevant documents.",
+    "relevant_doc_ids": ["doc_embeddings", "doc_semantic_search", "doc_vector_similarity"],
+    "expected_keywords": ["embeddings", "vectors", "semantic", "similarity", "cosine"],
+    "category": "howto"
+  },
+  {
+    "id": "q3",
+    "query": "What are the advantages of pgvector over other vector databases?",
+    "ground_truth_answer": "pgvector offers several advantages: it integrates directly with PostgreSQL, provides ACID compliance, supports SQL queries with vector operations, has lower operational complexity, and offers good performance for many use cases without requiring a separate database system.",
+    "relevant_doc_ids": ["doc_pgvector", "doc_vector_databases", "doc_postgres"],
+    "expected_keywords": ["pgvector", "PostgreSQL", "ACID", "SQL", "integration"],
+    "category": "comparison"
+  },
+  {
+    "id": "q4",
+    "query": "How does cross-encoder reranking improve retrieval quality?",
+    "ground_truth_answer": "Cross-encoder reranking improves quality by processing query-document pairs together, allowing for more nuanced relevance scoring. While slower than bi-encoders, cross-encoders achieve 10-20% better accuracy by capturing query-document interactions that bi-encoders miss.",
+    "relevant_doc_ids": ["doc_reranking", "doc_cross_encoder", "doc_retrieval_quality"],
+    "expected_keywords": ["cross-encoder", "reranking", "relevance", "accuracy", "bi-encoder"],
+    "category": "howto"
+  },
+  {
+    "id": "q5",
+    "query": "What is semantic caching and why is it useful?",
+    "ground_truth_answer": "Semantic caching stores query results and reuses them for semantically similar queries. It's useful because it provides 10-100x speedup by avoiding expensive LLM generation for similar questions, while maintaining quality through similarity-based matching.",
+    "relevant_doc_ids": ["doc_semantic_cache", "doc_performance", "doc_caching"],
+    "expected_keywords": ["semantic", "caching", "similarity", "speedup", "performance"],
+    "category": "definition"
+  },
+  {
+    "id": "q6",
+    "query": "What is the optimal chunk size for RAG systems?",
+    "ground_truth_answer": "The optimal chunk size depends on your use case, but 500-800 characters is generally recommended for balanced precision and context. Smaller chunks (100-300) offer better precision for Q&A, while larger chunks (1000-2000) preserve more context for long-form content.",
+    "relevant_doc_ids": ["doc_chunking", "doc_chunk_size", "doc_rag_tuning"],
+    "expected_keywords": ["chunk size", "characters", "precision", "context", "optimal"],
+    "category": "factual"
+  },
+  {
+    "id": "q7",
+    "query": "How does LlamaIndex handle document metadata?",
+    "ground_truth_answer": "LlamaIndex stores metadata in the node's metadata dictionary, which can include document IDs, page numbers, timestamps, and custom fields. Metadata can be used for filtering during retrieval and provides context for downstream processing.",
+    "relevant_doc_ids": ["doc_llamaindex", "doc_metadata", "doc_nodes"],
+    "expected_keywords": ["LlamaIndex", "metadata", "nodes", "filtering", "document"],
+    "category": "howto"
+  },
+  {
+    "id": "q8",
+    "query": "What are the key differences between llama.cpp and vLLM?",
+    "ground_truth_answer": "llama.cpp is designed for CPU inference with GGUF quantized models and works well on consumer hardware. vLLM is optimized for GPU inference with techniques like paged attention and continuous batching, offering 10-15x faster throughput but requiring GPU resources.",
+    "relevant_doc_ids": ["doc_llamacpp", "doc_vllm", "doc_inference"],
+    "expected_keywords": ["llama.cpp", "vLLM", "CPU", "GPU", "inference", "throughput"],
+    "category": "comparison"
+  },
+  {
+    "id": "q9",
+    "query": "What is the purpose of query expansion in RAG?",
+    "ground_truth_answer": "Query expansion generates additional query variations (e.g., synonyms, related terms, reformulations) to improve retrieval recall. It helps capture relevant documents that might be missed by the original query due to vocabulary mismatch.",
+    "relevant_doc_ids": ["doc_query_expansion", "doc_retrieval", "doc_recall"],
+    "expected_keywords": ["query expansion", "variations", "recall", "retrieval", "synonyms"],
+    "category": "definition"
+  },
+  {
+    "id": "q10",
+    "query": "How do you measure RAG system performance?",
+    "ground_truth_answer": "RAG performance is measured across three dimensions: retrieval quality (MRR, nDCG, recall, precision), answer quality (faithfulness, relevancy, context precision/recall), and performance metrics (latency, throughput, cache hit rate, resource usage).",
+    "relevant_doc_ids": ["doc_metrics", "doc_evaluation", "doc_performance"],
+    "expected_keywords": ["metrics", "retrieval", "answer", "latency", "quality", "evaluation"],
+    "category": "howto"
+  },
+  {
+    "id": "q11",
+    "query": "What is the role of context window size in RAG?",
+    "ground_truth_answer": "Context window size determines how much text (retrieved chunks + query + instructions) can fit into the LLM. Larger windows allow more retrieved chunks but may be slower. Typical sizes are 2048-8192 tokens, requiring careful balancing of chunk size and top-k.",
+    "relevant_doc_ids": ["doc_context_window", "doc_llm_config", "doc_tokens"],
+    "expected_keywords": ["context window", "tokens", "LLM", "chunks", "top-k"],
+    "category": "factual"
+  },
+  {
+    "id": "q12",
+    "query": "How does temperature affect LLM generation in RAG?",
+    "ground_truth_answer": "Temperature controls randomness in generation. Lower values (0.0-0.3) produce deterministic, factual responses ideal for RAG. Higher values (0.7-1.0) increase creativity but may introduce hallucinations. RAG systems typically use low temperature (0.1-0.3) to stay grounded in retrieved context.",
+    "relevant_doc_ids": ["doc_temperature", "doc_llm_config", "doc_generation"],
+    "expected_keywords": ["temperature", "generation", "randomness", "factual", "creativity"],
+    "category": "factual"
+  },
+  {
+    "id": "q13",
+    "query": "What is the difference between dense and sparse retrieval?",
+    "ground_truth_answer": "Dense retrieval uses learned embeddings and semantic similarity (e.g., FAISS, pgvector). Sparse retrieval uses lexical matching like BM25 or TF-IDF. Dense methods excel at semantic matching, while sparse methods are better for exact term matching. Hybrid approaches combine both.",
+    "relevant_doc_ids": ["doc_retrieval_methods", "doc_dense_retrieval", "doc_sparse_retrieval"],
+    "expected_keywords": ["dense", "sparse", "embeddings", "BM25", "semantic", "lexical"],
+    "category": "comparison"
+  },
+  {
+    "id": "q14",
+    "query": "How do you handle multi-document queries in RAG?",
+    "ground_truth_answer": "Multi-document queries can be handled by: 1) retrieving from multiple sources simultaneously, 2) using metadata filters to scope retrieval, 3) implementing fusion techniques to merge results, or 4) using hierarchical retrieval with document-level and chunk-level indices.",
+    "relevant_doc_ids": ["doc_multi_document", "doc_retrieval_strategies", "doc_fusion"],
+    "expected_keywords": ["multi-document", "retrieval", "metadata", "fusion", "hierarchical"],
+    "category": "howto"
+  },
+  {
+    "id": "q15",
+    "query": "What is the purpose of chunk overlap in document splitting?",
+    "ground_truth_answer": "Chunk overlap ensures that information spanning chunk boundaries isn't lost. It provides context continuity and improves retrieval quality by preventing relevant information from being split awkwardly. Typical overlap is 15-25% of chunk size.",
+    "relevant_doc_ids": ["doc_chunking", "doc_overlap", "doc_document_processing"],
+    "expected_keywords": ["overlap", "chunks", "boundaries", "continuity", "context"],
+    "category": "factual"
+  },
+  {
+    "id": "q16",
+    "query": "How does batching improve embedding performance?",
+    "ground_truth_answer": "Batching processes multiple texts simultaneously, leveraging parallelism in embedding models and GPUs. This reduces overhead and improves throughput. Typical batch sizes are 32-128 depending on available memory, providing 5-10x speedup over sequential processing.",
+    "relevant_doc_ids": ["doc_batching", "doc_embeddings", "doc_performance"],
+    "expected_keywords": ["batching", "embeddings", "parallelism", "throughput", "GPU"],
+    "category": "howto"
+  },
+  {
+    "id": "q17",
+    "query": "What are the tradeoffs between HyDE and standard retrieval?",
+    "ground_truth_answer": "HyDE (Hypothetical Document Embeddings) generates a hypothetical answer first, then uses it for retrieval. It can improve results when the query style differs from document style but adds latency and may degrade quality if the hypothetical answer is poor. Best for specialized domains.",
+    "relevant_doc_ids": ["doc_hyde", "doc_retrieval_methods", "doc_query_processing"],
+    "expected_keywords": ["HyDE", "hypothetical", "retrieval", "latency", "tradeoffs"],
+    "category": "comparison"
+  },
+  {
+    "id": "q18",
+    "query": "How do you implement A/B testing for RAG systems?",
+    "ground_truth_answer": "RAG A/B testing involves: 1) defining metrics (retrieval quality, answer quality, latency), 2) creating test configurations, 3) routing traffic between variants, 4) collecting metrics for comparison, and 5) statistical testing to determine significance. Use benchmark suites for offline evaluation.",
+    "relevant_doc_ids": ["doc_ab_testing", "doc_evaluation", "doc_metrics"],
+    "expected_keywords": ["A/B testing", "metrics", "configurations", "evaluation", "comparison"],
+    "category": "howto"
+  },
+  {
+    "id": "q19",
+    "query": "What causes context window overflow in RAG?",
+    "ground_truth_answer": "Context overflow occurs when retrieved chunks + query + instructions exceed the LLM's token limit. Causes include: too many chunks (high top-k), large chunk size, long queries, or verbose prompts. Solutions: reduce chunk size, lower top-k, or use a model with larger context window.",
+    "relevant_doc_ids": ["doc_context_overflow", "doc_token_limits", "doc_troubleshooting"],
+    "expected_keywords": ["context window", "overflow", "tokens", "limit", "chunks"],
+    "category": "factual"
+  },
+  {
+    "id": "q20",
+    "query": "How do you optimize retrieval latency in production RAG systems?",
+    "ground_truth_answer": "Optimize retrieval latency by: 1) using efficient vector indices (IVF, HNSW), 2) caching query embeddings and results, 3) batching queries when possible, 4) using approximate nearest neighbor search, 5) optimizing database queries, and 6) implementing connection pooling.",
+    "relevant_doc_ids": ["doc_optimization", "doc_latency", "doc_production"],
+    "expected_keywords": ["optimization", "latency", "caching", "indices", "production"],
+    "category": "howto"
+  }
+]

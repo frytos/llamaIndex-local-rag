@@ -1,0 +1,144 @@
+[
+  {
+    "id": "test_1",
+    "query": "Where is fine-tuning located?",
+    "ground_truth_answer": null,
+    "relevant_doc_ids": [
+      "doc_1",
+      "doc_2",
+      "doc_3"
+    ],
+    "expected_keywords": [
+      "fine-tuning"
+    ],
+    "category": "factual"
+  },
+  {
+    "id": "test_2",
+    "query": "What does deep learning refer to?",
+    "ground_truth_answer": null,
+    "relevant_doc_ids": [
+      "doc_1",
+      "doc_2",
+      "doc_3"
+    ],
+    "expected_keywords": [
+      "deep learning"
+    ],
+    "category": "definition"
+  },
+  {
+    "id": "test_3",
+    "query": "Guide me through RAG.",
+    "ground_truth_answer": null,
+    "relevant_doc_ids": [
+      "doc_1",
+      "doc_2",
+      "doc_3"
+    ],
+    "expected_keywords": [
+      "RAG"
+    ],
+    "category": "howto"
+  },
+  {
+    "id": "test_4",
+    "query": "Which is better: fine-tuning or prompt engineering?",
+    "ground_truth_answer": null,
+    "relevant_doc_ids": [
+      "doc_1",
+      "doc_2",
+      "doc_3"
+    ],
+    "expected_keywords": [
+      "fine-tuning",
+      "prompt engineering"
+    ],
+    "category": "comparison"
+  },
+  {
+    "id": "test_5",
+    "query": "Who created machine learning?",
+    "ground_truth_answer": null,
+    "relevant_doc_ids": [
+      "doc_1",
+      "doc_2",
+      "doc_3"
+    ],
+    "expected_keywords": [
+      "machine learning"
+    ],
+    "category": "factual"
+  },
+  {
+    "id": "test_6",
+    "query": "Explain what vector databases means.",
+    "ground_truth_answer": null,
+    "relevant_doc_ids": [
+      "doc_1",
+      "doc_2",
+      "doc_3"
+    ],
+    "expected_keywords": [
+      "vector databases"
+    ],
+    "category": "definition"
+  },
+  {
+    "id": "test_7",
+    "query": "What are the steps to RAG?",
+    "ground_truth_answer": null,
+    "relevant_doc_ids": [
+      "doc_1",
+      "doc_2",
+      "doc_3"
+    ],
+    "expected_keywords": [
+      "RAG"
+    ],
+    "category": "howto"
+  },
+  {
+    "id": "test_8",
+    "query": "What is the difference between neural networks and ranking?",
+    "ground_truth_answer": null,
+    "relevant_doc_ids": [
+      "doc_1",
+      "doc_2",
+      "doc_3"
+    ],
+    "expected_keywords": [
+      "neural networks",
+      "ranking"
+    ],
+    "category": "comparison"
+  },
+  {
+    "id": "test_9",
+    "query": "Who created prompt engineering?",
+    "ground_truth_answer": null,
+    "relevant_doc_ids": [
+      "doc_1",
+      "doc_2",
+      "doc_3"
+    ],
+    "expected_keywords": [
+      "prompt engineering"
+    ],
+    "category": "factual"
+  },
+  {
+    "id": "test_10",
+    "query": "Define fine-tuning.",
+    "ground_truth_answer": null,
+    "relevant_doc_ids": [
+      "doc_1",
+      "doc_2",
+      "doc_3"
+    ],
+    "expected_keywords": [
+      "fine-tuning"
+    ],
+    "category": "definition"
+  }
+]

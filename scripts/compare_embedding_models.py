@@ -144,16 +144,21 @@ def query_current_index(table_name: str = "messenger_clean_cs700_ov150"):
     import psycopg2
     try:
         conn = psycopg2.connect(
-            host="localhost",
-            port=5432,
-            user="fryt",
-            password="frytos",
-            database="vector_db"
+            host=os.environ.get("PGHOST", "localhost"),
+            port=int(os.environ.get("PGPORT", "5432")),
+            user=os.environ.get("PGUSER"),
+            password=os.environ.get("PGPASSWORD"),
+            database=os.environ.get("DB_NAME", "vector_db")
         )
         conn.autocommit = True
 
         with conn.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) FROM {table_name}")
+            from psycopg2 import sql
+            cur.execute(
+                sql.SQL("SELECT COUNT(*) FROM {}").format(
+                    sql.Identifier(table_name)
+                )
+            )
             count = cur.fetchone()[0]
             print(f"✓ Table exists with {count:,} chunks")
 
