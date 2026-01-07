@@ -86,7 +86,7 @@ fi
 # Install PyTorch with CUDA
 echo ""
 if ! python3 -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
-    echo "🔥 [3/3] Installing PyTorch 2.4.0 + CUDA 12.4 (FULL OUTPUT)..."
+    echo "🔥 [3/5] Installing PyTorch 2.4.0 + CUDA 12.4 (FULL OUTPUT)..."
     echo "────────────────────────────────────────────────────────────"
     echo "  📊 Package size: ~2GB"
     echo "  ⏱️  Expected time: 1-3 minutes"
@@ -99,8 +99,29 @@ if ! python3 -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; th
     echo "────────────────────────────────────────────────────────────"
     echo "✅ PyTorch installed"
 else
-    echo "✅ [3/3] PyTorch with CUDA already installed"
+    echo "✅ [3/5] PyTorch with CUDA already installed"
 fi
+echo ""
+
+# Install llama-cpp-python with CUDA support
+echo "🔥 [4/5] Installing llama-cpp-python with CUDA (FULL OUTPUT)..."
+echo "────────────────────────────────────────────────────────────"
+echo "  🔨 Compiling llama.cpp with CUDA support"
+echo "  ⏱️  Expected time: 3-5 minutes (one-time compilation)"
+echo "  💡 This ensures LLM runs on GPU (5-10x faster than CPU)"
+echo ""
+
+# Uninstall CPU-only version if exists
+pip uninstall -y llama-cpp-python 2>/dev/null || true
+
+# Install with CUDA support (compile from source) - VERBOSE MODE
+CMAKE_ARGS="-DGGML_CUDA=on" \
+FORCE_CMAKE=1 \
+pip install -v llama-cpp-python==0.3.16 --force-reinstall --no-cache-dir
+
+echo ""
+echo "────────────────────────────────────────────────────────────"
+echo "✅ llama-cpp-python with CUDA installed"
 echo ""
 echo "==============================================================="
 echo ""
