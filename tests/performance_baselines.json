@@ -1,0 +1,15 @@
+{
+  "embedding_throughput": 67.0,
+  "vector_search_latency": 0.011,
+  "db_insertion_throughput": 1250.0,
+  "query_latency_no_vllm": 8.0,
+  "query_latency_vllm": 1.5,
+  "document_loading_time": 40.0,
+  "chunking_throughput": 166.0,
+  "metadata": {
+    "platform": "M1 Mac Mini 16GB",
+    "last_updated": "2025-01-07",
+    "python_version": "3.11",
+    "notes": "Baseline performance metrics from initial implementation"
+  }
+}
