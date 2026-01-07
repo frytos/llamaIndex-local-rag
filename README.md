@@ -543,6 +543,72 @@ PDF_PATH=doc2.pdf PGTABLE=doc2 RESET_TABLE=1 python rag_low_level_m1_16gb_verbos
 PGTABLE=doc1 QUESTION="..." python rag_low_level_m1_16gb_verbose.py
 ```
 
+## Performance Tracking & Regression Testing
+
+The pipeline includes automated performance tracking with CI/CD integration for catching regressions and monitoring trends.
+
+### Key Features
+
+- **Automated regression detection** in CI/CD (blocks PRs with >20% regression)
+- **Time-series tracking** with SQLite database
+- **Interactive dashboard** with Plotly visualizations
+- **Multi-platform baselines** (M1 Mac, GPU servers, GitHub Actions)
+- **Nightly benchmarks** with auto-baseline updates
+
+### Quick Start
+
+**Run performance tests:**
+```bash
+# Run tests with recording
+ENABLE_PERFORMANCE_RECORDING=1 pytest tests/test_performance_regression.py -v
+```
+
+**View performance dashboard:**
+```bash
+# Generate dashboard (last 30 days)
+python scripts/generate_performance_dashboard.py --days 30
+
+# Open in browser
+open benchmarks/dashboard.html
+```
+
+**Update baselines after optimization:**
+```bash
+# Preview changes
+python scripts/update_baselines.py --dry-run
+
+# Apply updates
+python scripts/update_baselines.py
+```
+
+### Tracked Metrics
+
+| Metric | Baseline (M1 16GB) | CI Status |
+|--------|-------------------|-----------|
+| Query Latency (no vLLM) | 8.0s | ✅ Auto-tested |
+| Embedding Throughput | 67 chunks/s | ✅ Auto-tested |
+| Vector Search | 11ms | ✅ Auto-tested |
+| DB Insertion | 1250 nodes/s | ✅ Auto-tested |
+| Memory Usage | <14GB | ✅ Auto-tested |
+| Cache Hit Rate | ~42% | ✅ Tracked |
+
+### CI/CD Integration
+
+**Every Pull Request:**
+- Performance tests run automatically
+- Report posted as PR comment
+- PR blocked if regression detected
+
+**Nightly (2 AM UTC):**
+- Comprehensive benchmark suite
+- Dashboard generated
+- Baselines auto-updated on improvements
+- GitHub issue created on regression
+
+See **[Performance Tracking Guide](docs/PERFORMANCE_TRACKING.md)** for complete documentation.
+
+---
+
 ## Development
 
 ### Running Tests

@@ -861,6 +861,111 @@ BATCH_TIMEOUT=1.0
 
 ---
 
+## Performance Tracking & Regression Testing
+
+**NEW**: Automated performance tracking with CI/CD integration, historical trends, and regression detection.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENABLE_PERFORMANCE_RECORDING` | `0` | Enable recording to history database (`0` or `1`) |
+| `PERFORMANCE_RUN_TYPE` | `manual` | Run type: `ci`, `nightly`, or `manual` |
+| `PERFORMANCE_PLATFORM` | auto-detect | Override platform detection (e.g., `M1_Mac_16GB`) |
+| `PERFORMANCE_DB_PATH` | `benchmarks/history/performance.db` | Path to SQLite database |
+| `REGRESSION_THRESHOLD` | `0.20` | Regression tolerance (0.20 = 20%) |
+| `BENCHMARK_MODE` | `standard` | Benchmark mode: `quick`, `standard`, or `comprehensive` |
+
+### Platform Auto-Detection
+
+The system automatically detects your hardware platform:
+
+| Platform | Auto-Detected As | Use Case |
+|----------|------------------|----------|
+| M1 Mac Mini 16GB | `M1_Mac_16GB` | Local development |
+| M2 MacBook Pro 32GB | `M2_Mac_32GB` | Local development |
+| GitHub Actions macOS | `GitHub_Actions_macOS` | CI/CD |
+| RTX 4090 Server | `RTX_4090_24GB` | Production |
+| RunPod A100 | `RunPod_A100` | Cloud GPU |
+
+**Override detection:**
+```bash
+PERFORMANCE_PLATFORM=Custom_Server pytest tests/test_performance_regression.py
+```
+
+### Usage Examples
+
+**Run performance tests with recording:**
+```bash
+# Record to history database
+ENABLE_PERFORMANCE_RECORDING=1 \
+PERFORMANCE_RUN_TYPE=manual \
+pytest tests/test_performance_regression.py -v
+```
+
+**Generate performance dashboard:**
+```bash
+# Create dashboard (last 30 days)
+python scripts/generate_performance_dashboard.py --days 30
+
+# Open in browser
+open benchmarks/dashboard.html
+```
+
+**Update baselines after optimization:**
+```bash
+# Preview proposed updates
+python scripts/update_baselines.py --dry-run
+
+# Apply updates (interactive)
+python scripts/update_baselines.py
+
+# Auto-approve improvements (CI)
+python scripts/update_baselines.py --auto-approve-improvements --min-runs 5
+```
+
+**Run comprehensive benchmark:**
+```bash
+# Quick mode (for testing)
+BENCHMARK_MODE=quick python scripts/run_comprehensive_benchmark.py
+
+# Comprehensive mode (for nightly)
+BENCHMARK_MODE=comprehensive \
+ENABLE_PERFORMANCE_RECORDING=1 \
+PERFORMANCE_RUN_TYPE=nightly \
+python scripts/run_comprehensive_benchmark.py --output benchmarks/nightly/$(date +%Y%m%d)
+```
+
+### Tracked Metrics
+
+| Metric | Unit | Direction | Description |
+|--------|------|-----------|-------------|
+| `embedding_throughput` | chunks/sec | ↑ Higher is better | Document embedding speed |
+| `vector_search_latency` | seconds | ↓ Lower is better | pgvector search time |
+| `query_latency_no_vllm` | seconds | ↓ Lower is better | End-to-end query (llama.cpp) |
+| `query_latency_vllm` | seconds | ↓ Lower is better | End-to-end query (vLLM) |
+| `db_insertion_throughput` | nodes/sec | ↑ Higher is better | Database write speed |
+| `peak_memory_gb` | GB | ↓ Lower is better | Maximum memory usage |
+| `cache_hit_rate` | 0-1 | ↑ Higher is better | Query cache effectiveness |
+| `tokens_per_second` | tokens/sec | ↑ Higher is better | LLM generation speed |
+| `avg_mrr` | 0-1 | ↑ Higher is better | Mean Reciprocal Rank |
+| `avg_ndcg` | 0-1 | ↑ Higher is better | Normalized DCG |
+
+### CI/CD Integration
+
+**Automated on every PR:**
+- Performance regression tests run automatically
+- Report posted as PR comment
+- PR blocked if >20% regression detected
+
+**Nightly (2 AM UTC):**
+- Comprehensive benchmark suite
+- Baseline auto-update on sustained improvements
+- Performance dashboard generated
+- GitHub issue created on regression
+
+**See**: `docs/PERFORMANCE_TRACKING.md` for complete guide.
+
+---
+
 ## Complete Usage Examples
 
 ### 1. Fast MLX Indexing (Recommended)

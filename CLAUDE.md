@@ -292,3 +292,22 @@ CTX=8192 TOP_K=3 CHUNK_SIZE=500 python rag_low_level_m1_16gb_verbose.py
 - `/optimize-rag` - Analyze and suggest optimizations
 - `/audit-index` - Check index health and consistency
 - `/compare-chunks` - Compare different chunk configurations
+
+### Performance Tracking Commands
+
+- **View Dashboard** - `python scripts/generate_performance_dashboard.py`
+- **Update Baselines** - `python scripts/update_baselines.py --dry-run`
+- **Performance Report** - `python scripts/generate_performance_report.py --format markdown`
+- **Run Benchmark** - `python scripts/run_comprehensive_benchmark.py --mode quick`
+
+**Quick commands:**
+```bash
+# Run tests with performance tracking
+ENABLE_PERFORMANCE_RECORDING=1 pytest tests/test_performance_regression.py -v
+
+# Generate dashboard (30 days)
+python scripts/generate_performance_dashboard.py
+
+# Check for baseline updates
+python scripts/update_baselines.py --dry-run
+```
