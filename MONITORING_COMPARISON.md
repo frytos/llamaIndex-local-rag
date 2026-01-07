@@ -198,41 +198,32 @@ streamlit run monitoring_dashboard.py
 
 To fully integrate both systems:
 
-### Step 1: Enable Prometheus Exporter
+### Step 1: Enable Prometheus Metrics Export
 
 Add to your RAG application:
 
 ```python
-# In your rag_low_level_m1_16gb_verbose.py or FastAPI app
-from utils.prometheus_exporter import update_all_metrics, export_metrics
-from fastapi import FastAPI, Response
+# In your rag_low_level_m1_16gb_verbose.py
+from utils.metrics import get_metrics
 
-app = FastAPI()
+# Initialize metrics
+metrics = get_metrics()
 
-@app.get("/metrics")
-def metrics_endpoint():
-    """Prometheus scrape endpoint"""
-    update_all_metrics()  # Update from module stats
-    return Response(content=export_metrics(), media_type="text/plain")
+# In your query function
+def run_query(query_text):
+    with metrics.query_timer():
+        result = query_engine.query(query_text)
 
-# Or for simple HTTP server
-if __name__ == "__main__":
-    import http.server
-    import socketserver
+    metrics.record_query_success()
+    metrics.record_retrieval(len(nodes), scores)
 
-    class MetricsHandler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):
-            if self.path == '/metrics':
-                update_all_metrics()
-                self.send_response(200)
-                self.send_header('Content-type', 'text/plain')
-                self.end_headers()
-                self.wfile.write(export_metrics().encode())
+    # Export to file for Prometheus
+    metrics.export()  # Writes to metrics/rag_app.prom
 
-    with socketserver.TCPServer(("", 8000), MetricsHandler) as httpd:
-        print("Metrics server on http://localhost:8000/metrics")
-        httpd.serve_forever()
+    return result
 ```
+
+The metrics are automatically exported to `metrics/rag_app.prom` which Prometheus scrapes via file-based service discovery (already configured in `config/monitoring/prometheus.yml`).
 
 ### Step 2: Configure Prometheus to Scrape
 

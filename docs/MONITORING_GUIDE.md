@@ -357,103 +357,68 @@ RAG Pipeline → Prometheus (metrics) → Grafana (visualization)
 
 ### Setup (15 minutes)
 
-#### Step 1: Add Prometheus Metrics Exporter
+#### Step 1: Use Built-in Metrics Module
 
-**File**: `utils/prometheus_exporter.py`
+**File**: `utils/metrics.py` (already created by Operations agent)
+
+The monitoring stack already includes a metrics module that exports to Prometheus text format:
 
 ```python
 """
-Prometheus metrics exporter for RAG pipeline.
+Using the built-in metrics module for Prometheus integration.
 
-Exports metrics in Prometheus format for scraping.
+Metrics are automatically exported to metrics/rag_app.prom
+which Prometheus scrapes via file-based service discovery.
 """
 
-import time
-from prometheus_client import Counter, Histogram, Gauge, Info, generate_latest
-from prometheus_client import REGISTRY
+from utils.metrics import get_metrics
 
-from utils.query_cache import semantic_cache
-from utils.conversation_memory import session_manager
+# Get global metrics instance
+metrics = get_metrics()
 
-# Define metrics
-query_counter = Counter(
-    'rag_queries_total',
-    'Total number of queries processed',
-    ['query_type', 'cache_hit']
-)
+# Record query metrics
+with metrics.query_timer():
+    result = query_engine.query(query_text)
 
-query_latency = Histogram(
-    'rag_query_latency_seconds',
-    'Query latency in seconds',
-    ['component'],  # embedding, retrieval, generation
-    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0]
-)
+metrics.record_query_success()
+metrics.record_retrieval(num_docs, similarity_scores)
 
-cache_hit_rate = Gauge(
-    'rag_cache_hit_rate',
-    'Cache hit rate (0-1)'
-)
-
-active_sessions = Gauge(
-    'rag_active_sessions',
-    'Number of active conversation sessions'
-)
-
-answer_confidence = Histogram(
-    'rag_answer_confidence',
-    'Answer confidence score',
-    buckets=[0.0, 0.3, 0.5, 0.7, 0.8, 0.9, 0.95, 1.0]
-)
-
-retrieval_quality = Histogram(
-    'rag_retrieval_mrr',
-    'Retrieval MRR score',
-    buckets=[0.0, 0.3, 0.5, 0.7, 0.8, 0.9, 0.95, 1.0]
-)
-
-# Info metric for configuration
-rag_info = Info('rag_config', 'RAG configuration info')
-
-
-def update_metrics():
-    """Update all Prometheus metrics from module stats"""
-
-    # Update cache metrics
-    stats = semantic_cache.stats()
-    total_requests = stats['hits'] + stats['misses']
-    if total_requests > 0:
-        cache_hit_rate.set(stats['hit_rate'])
-
-    # Update session metrics
-    conv_stats = session_manager.stats()
-    active_sessions.set(conv_stats['active_sessions'])
-
-
-def export_metrics():
-    """Export metrics in Prometheus format"""
-    update_metrics()
-    return generate_latest(REGISTRY)
-
-
-# Example: Track a query
-def track_query(query_type: str, cache_hit: bool, latency_s: float,
-                component: str, confidence: float = None, mrr: float = None):
-    """Track query metrics"""
-    query_counter.labels(query_type=query_type, cache_hit=str(cache_hit)).inc()
-    query_latency.labels(component=component).observe(latency_s)
-
-    if confidence is not None:
-        answer_confidence.observe(confidence)
-
-    if mrr is not None:
-        retrieval_quality.observe(mrr)
+# Export metrics to file (Prometheus will scrape from metrics/ directory)
+metrics.export()  # Writes to metrics/rag_app.prom
 ```
 
-#### Step 2: Add Metrics Endpoint (if using FastAPI)
+**Key Features**:
+- No external dependencies (pure Python)
+- File-based export (Prometheus scrapes from `metrics/` directory)
+- Thread-safe metric recording
+- Histogram buckets for latency tracking
+- Automatic cache hit rate calculation
+- Summary statistics via `metrics.get_summary()`
 
-```python
-from fastapi import FastAPI
-from prometheus_client import make_asgi_app
+**Available Metrics**:
+- `rag_query_total` - Total queries
+- `rag_query_success_total` - Successful queries
+- `rag_query_errors_total` - Failed queries
+- `rag_query_duration_seconds` - Query latency histogram
+- `rag_retrieval_score_avg` - Average similarity score
+- `rag_cache_hit_rate` - Cache effectiveness
+- `rag_db_rows_total` - Vector store size
+- And more (see `utils/metrics.py` for complete list)
+
+#### Step 2: Prometheus Configuration
+
+The monitoring stack is already configured to scrape file-based metrics.
+
+**File**: `config/monitoring/prometheus.yml`
+
+```yaml
+scrape_configs:
+  # RAG Application metrics (file-based)
+  - job_name: 'rag-app'
+    file_sd_configs:
+      - files:
+          - '/prometheus/metrics/*.prom'
+        refresh_interval: 30s
 
 app = FastAPI()
 
@@ -1364,7 +1329,7 @@ streamlit run monitoring_dashboard.py
 **Best Choice**: **Prometheus + Grafana**
 
 ```bash
-# 1. Add prometheus_exporter.py to your utils/
+# 1. Use utils/metrics.py for Prometheus integration
 # 2. Start monitoring stack
 docker-compose -f config/docker-compose-monitoring.yml up -d
 

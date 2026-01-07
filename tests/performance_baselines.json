@@ -1,15 +1,30 @@
 {
-  "embedding_throughput": 67.0,
-  "vector_search_latency": 0.011,
-  "db_insertion_throughput": 1250.0,
-  "query_latency_no_vllm": 8.0,
-  "query_latency_vllm": 1.5,
-  "document_loading_time": 40.0,
-  "chunking_throughput": 166.0,
-  "metadata": {
-    "platform": "M1 Mac Mini 16GB",
-    "last_updated": "2025-01-07",
-    "python_version": "3.11",
-    "notes": "Baseline performance metrics from initial implementation"
+  "M1_Mac_16GB": {
+    "embedding_throughput": 67.0,
+    "vector_search_latency": 0.011,
+    "db_insertion_throughput": 1250.0,
+    "query_latency_no_vllm": 8.0,
+    "query_latency_vllm": 1.5,
+    "document_loading_time": 40.0,
+    "chunking_throughput": 166.0,
+    "metadata": {
+      "platform": "M1 Mac Mini 16GB",
+      "last_updated": "2025-01-07T00:00:00Z",
+      "python_version": "3.11",
+      "git_commit": null,
+      "notes": "Baseline performance metrics from initial implementation. Migrated to multi-platform format."
+    }
+  },
+  "GitHub_Actions_macOS": {
+    "embedding_throughput": 50.0,
+    "vector_search_latency": 0.015,
+    "db_insertion_throughput": 1000.0,
+    "query_latency_no_vllm": 12.0,
+    "metadata": {
+      "platform": "GitHub Actions macOS",
+      "last_updated": "2025-01-07T00:00:00Z",
+      "python_version": "3.11",
+      "notes": "CI environment typically 20-30% slower than local M1 Mac. Initial estimates to be updated with actual CI runs."
+    }
   }
 }
