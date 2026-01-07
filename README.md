@@ -58,6 +58,8 @@ python rag_low_level_m1_16gb_verbose.py
 ```
 
 **Documentation:**
+- **[📖 Comprehensive Project Explanation](docs/PROJECT_EXPLANATION.md)** - Complete guide for developers, researchers, and AI systems
+- **[🏗️ Architecture Diagrams](docs/ARCHITECTURE_DIAGRAMS.md)** - Visual Mermaid diagrams of RAG pipeline and infrastructure
 - [RAG Improvements Overview](docs/IMPROVEMENTS_OVERVIEW.md) - High-level summary
 - [Advanced Retrieval Techniques](docs/ADVANCED_RETRIEVAL.md) - Reranking guide
 - [Semantic Cache Guide](docs/SEMANTIC_CACHE_GUIDE.md) - Caching setup and tuning
