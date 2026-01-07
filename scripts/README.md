@@ -56,6 +56,12 @@ Utility scripts for deployment, benchmarking, visualization, and data processing
 - `config_optimized.sh` - Optimized configuration settings
 - `helper_quick_commands.sh` - Collection of useful quick commands
 
+## Validation & Organization Scripts
+
+- `validate_repo_organization.py` - Audit repository structure against best practices
+- `validate_setup.py` - Validate development environment setup
+- `check_dependencies.py` - Check and verify Python dependencies
+
 ## Usage Examples
 
 ```bash
@@ -73,6 +79,12 @@ python scripts/tensorboard_embeddings.py
 
 # Clean Messenger data
 python scripts/clean_messenger_html.py
+
+# Validate repository organization
+python scripts/validate_repo_organization.py
+
+# Generate markdown audit report
+python scripts/validate_repo_organization.py --format=markdown --output=docs/ORG_AUDIT.md
 ```
 
 ## Naming Convention
