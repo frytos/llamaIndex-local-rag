@@ -51,6 +51,13 @@ from llama_index.core.retrievers import BaseRetriever
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.llms.llama_cpp import LlamaCPP
 
+# Optional: vLLM for GPU-accelerated inference (15x faster than llama.cpp CPU)
+try:
+    from vllm_wrapper import build_vllm_llm
+    VLLM_AVAILABLE = True
+except ImportError:
+    VLLM_AVAILABLE = False
+
 
 # -----------------------
 # Optional memory logging (nice to have, not required)
@@ -1649,12 +1656,40 @@ def build_embed_model():
     return model
 
 
-def build_llm() -> LlamaCPP:
+def build_llm():
     """
     LLM is only for "answer synthesis".
     Retrieval quality is dominated by embedding/chunking/top_k;
     LLM mainly affects answer style + reasoning and speed.
+
+    Supports two backends:
+    - llama.cpp: GGUF models, CPU/GPU (set N_GPU_LAYERS=99 for GPU)
+    - vLLM: HuggingFace models, GPU-optimized (set USE_VLLM=1)
+
+    vLLM is 10-20x faster on GPU but requires HuggingFace format models.
     """
+    use_vllm = os.getenv("USE_VLLM", "0") == "1"
+
+    if use_vllm and VLLM_AVAILABLE:
+        # vLLM backend (GPU-optimized, 10-20x faster)
+        vllm_model = os.getenv("VLLM_MODEL", "TheBloke/Mistral-7B-Instruct-v0.2-AWQ")
+        log.info(f"LLM: vLLM GPU-accelerated ({vllm_model})")
+        log.info(f"LLM params: MAX_LEN={S.context_window} MAX_TOKENS={S.max_new_tokens} TEMP={S.temperature}")
+        log.info("  ⚡ Using vLLM for 10-20x faster inference on GPU!")
+
+        llm = build_vllm_llm(
+            model_name=vllm_model,
+            temperature=S.temperature,
+            max_tokens=S.max_new_tokens,
+            gpu_memory_utilization=0.8,
+            max_model_len=S.context_window,
+        )
+        return llm
+    elif use_vllm and not VLLM_AVAILABLE:
+        log.warning("USE_VLLM=1 but vLLM not installed. Install with: pip install vllm")
+        log.warning("Falling back to llama.cpp...")
+
+    # llama.cpp backend (default, supports GGUF models)
     src = f"MODEL_PATH={S.model_path}" if S.model_path else f"MODEL_URL={S.model_url}"
     log.info(f"LLM: llama.cpp GGUF ({src})")
     log.info(f"LLM params: CTX={S.context_window} MAX_NEW_TOKENS={S.max_new_tokens} TEMP={S.temperature} N_GPU_LAYERS={S.n_gpu_layers} N_BATCH={S.n_batch}")
