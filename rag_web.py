@@ -1687,6 +1687,9 @@ def page_deployment():
 
                     if enable_auto_setup and github_repo and "YOUR_USERNAME" not in github_repo:
                         # Auto-setup enabled
+                        # Extract pod ID prefix for HTTP proxy URL
+                        pod_id_short = pod_id.split('-')[0] if '-' in pod_id else pod_id
+
                         st.info(f"""
                         **Pod Details:**
                         - **ID**: `{pod_id}`
@@ -1699,7 +1702,7 @@ def page_deployment():
 
                         The pod is automatically:
                         1. ✅ Cloning your repository from GitHub
-                        2. ✅ Installing PostgreSQL + pgvector
+                        2. ✅ Installing PostgreSQL + pgvector (configured for external access)
                         3. ✅ Setting up Python environment
                         4. ✅ Starting vLLM server
 
@@ -1707,18 +1710,39 @@ def page_deployment():
 
                         **Check Progress:**
                         ```bash
-                        ssh {ssh_host}@ssh.runpod.io
+                        ssh {ssh_host}@ssh.runpod.io -i ~/.ssh/runpod_key
                         tail -f /workspace/startup.log
                         ```
 
-                        **When Complete (~15 min), Create SSH Tunnel:**
-                        ```bash
-                        ssh -N -L 8000:localhost:8000 -L 5432:localhost:5432 {ssh_host}@ssh.runpod.io
-                        ```
+                        **After Setup Completes (~15 min), Configure Your Mac:**
 
-                        **Then Test:**
-                        - `curl http://localhost:8000/health` (should return: ok)
-                        - Use the "Query" tab to run RAG queries!
+                        1. **Get Direct TCP Connection Details:**
+                           - Go to RunPod → Your Pod → Connect → "Direct TCP ports"
+                           - Note the PostgreSQL port (maps to :5432)
+
+                        2. **Update your .env file:**
+                           ```bash
+                           # PostgreSQL - Use Direct TCP IP:PORT from RunPod
+                           PGHOST=YOUR_TCP_IP
+                           PGPORT=YOUR_TCP_PORT  # From RunPod direct TCP ports
+
+                           # vLLM - Use HTTP Proxy (no tunnel needed!)
+                           USE_VLLM=1
+                           VLLM_API_BASE=https://{ssh_host}-8000.proxy.runpod.net/v1
+                           ```
+
+                        3. **Test Services:**
+                           ```bash
+                           source .env
+                           curl https://{ssh_host}-8000.proxy.runpod.net/health
+                           psql -h $PGHOST -p $PGPORT -U fryt -d vector_db -c "SELECT 1"
+                           ```
+
+                        4. **Run RAG Pipeline:**
+                           - Use CLI: `python rag_low_level_m1_16gb_verbose.py --query-only --query "test"`
+                           - Or use the "Query" tab in this UI!
+
+                        **No SSH tunnel needed** - direct TCP + HTTPS proxy! 🚀
                         """)
                     else:
                         # Manual setup

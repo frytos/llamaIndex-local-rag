@@ -179,7 +179,23 @@ if [ ! -d "/var/lib/postgresql/14/main" ]; then
     su - postgres -c "/usr/lib/postgresql/14/bin/initdb -D /var/lib/postgresql/14/main"
 fi
 
+# Configure PostgreSQL for external access (RunPod direct TCP)
+log_info "Configuring PostgreSQL for external connections..."
+log_info "   Setting listen_addresses to '*'..."
+
+# Update postgresql.conf to listen on all interfaces
+sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/${PG_VERSION}/main/postgresql.conf
+sed -i "s/listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/${PG_VERSION}/main/postgresql.conf
+
+# Update pg_hba.conf to allow external connections
+log_info "   Adding external access rule to pg_hba.conf..."
+echo "# Allow external connections (RunPod direct TCP)" >> /etc/postgresql/${PG_VERSION}/main/pg_hba.conf
+echo "host    all             all             0.0.0.0/0               md5" >> /etc/postgresql/${PG_VERSION}/main/pg_hba.conf
+
+log_info "✅ PostgreSQL configured for external access"
+
 # Start PostgreSQL
+log_info "Starting PostgreSQL service..."
 service postgresql start
 
 # Wait for PostgreSQL to be ready
@@ -187,6 +203,10 @@ sleep 3
 
 if pg_isready -q; then
     log_info "✅ PostgreSQL is running"
+
+    # Verify it's listening on all interfaces
+    PG_LISTEN=$(ss -tulpn 2>/dev/null | grep 5432 | head -1 || netstat -tulpn 2>/dev/null | grep 5432 | head -1)
+    log_info "   Listening on: ${PG_LISTEN}"
 else
     log_error "❌ PostgreSQL failed to start"
     exit 1
