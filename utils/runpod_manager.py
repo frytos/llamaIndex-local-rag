@@ -467,20 +467,27 @@ class RunPodManager:
         pod = self.get_pod(pod_id)
 
         if not pod:
+            log.error(f"Pod {pod_id} not found when generating SSH command")
             return f"# Pod {pod_id} not found"
 
         # Extract SSH host from machine info
         machine = pod.get("machine") or {}
         ssh_host = machine.get("podHostId", "")
 
+        log.debug(f"SSH host from machine info: {ssh_host}")
+
         # If still empty, try from status
         if not ssh_host:
+            log.warning("SSH host not in machine info, trying status...")
             status = self.get_pod_status(pod_id)
             ssh_host = status.get("ssh_host", "")
+            log.debug(f"SSH host from status: {ssh_host}")
 
         # If still empty, can't generate command
         if not ssh_host:
-            return f"# SSH host not available yet for pod {pod_id}. Wait a moment and try again."
+            log.error(f"SSH host not available for pod {pod_id}")
+            # Return a placeholder that's obviously wrong so user knows to check
+            return f"# ERROR: SSH host not available yet for pod {pod_id}. Refresh the page and try again."
 
         # Default ports: vLLM (8000), PostgreSQL (5432), Grafana (3000)
         if ports is None:
@@ -490,7 +497,9 @@ class RunPodManager:
         port_forwards = " ".join([f"-L {p}:localhost:{p}" for p in ports])
 
         # Include SSH key hint if user has custom key
-        ssh_cmd = f"ssh -i ~/.ssh/runpod_key {port_forwards} {ssh_host}@ssh.runpod.io"
+        ssh_cmd = f"ssh -i ~/.ssh/runpod_key -N {port_forwards} {ssh_host}@ssh.runpod.io"
+
+        log.info(f"Generated SSH command for {pod_id}: {ssh_cmd}")
 
         return ssh_cmd
 
