@@ -6,6 +6,7 @@ Uses vLLM OpenAI-compatible API server for ultra-fast queries
 import os
 from typing import Optional
 from llama_index.llms.openai import OpenAI
+from llama_index.core.llms import LLMMetadata
 
 
 def build_vllm_client(
@@ -80,6 +81,16 @@ def build_vllm_client(
         is_chat_model=True,  # Treat as chat model
         context_window=32768,  # Set large context (vLLM will handle it)
         is_function_calling_model=False,  # Disable function calling validation
+    )
+
+    # Override metadata to prevent model name validation
+    # This bypasses LlamaIndex's OpenAI model name checking
+    llm._metadata = LLMMetadata(
+        context_window=32768,
+        num_output=max_tokens,
+        is_chat_model=True,
+        is_function_calling_model=False,
+        model_name=model,
     )
 
     # Log actual model for reference
