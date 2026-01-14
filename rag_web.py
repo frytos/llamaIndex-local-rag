@@ -1281,6 +1281,10 @@ def page_deployment():
         pods = []
 
     if pods:
+        # Initialize SSH host cache if needed
+        if 'pod_ssh_hosts' not in st.session_state:
+            st.session_state.pod_ssh_hosts = {}
+
         # Create dataframe for display
         pod_data = []
         for pod in pods:
@@ -1288,13 +1292,19 @@ def page_deployment():
             runtime = pod.get('runtime') or {}
             machine = pod.get('machine') or {}
 
+            # Cache SSH host if available
+            pod_id = pod.get('id', '')
+            ssh_host = machine.get('podHostId', '')
+            if pod_id and ssh_host:
+                st.session_state.pod_ssh_hosts[pod_id] = ssh_host
+
             pod_data.append({
                 "Name": pod.get('name', 'N/A'),
                 "Status": runtime.get('containerState', 'unknown'),
                 "GPU": machine.get('gpuTypeId', 'N/A'),
                 "Uptime": f"{runtime.get('uptimeInSeconds', 0) // 60}min",
                 "Cost/hr": f"${pod.get('costPerHr', 0):.2f}",
-                "ID": pod.get('id', '')[:12] + "..."
+                "ID": pod_id[:12] + "..." if pod_id else "N/A"
             })
 
         df = pd.DataFrame(pod_data)
@@ -1331,7 +1341,16 @@ def page_deployment():
                 st.metric("Cost/hr", f"${status['cost_per_hour']:.2f}")
 
             # SSH connection info
-            ssh_cmd = manager.get_ssh_command(selected_pod_id)
+            # Try cached SSH host first (more reliable for newly created pods)
+            cached_host = st.session_state.get('pod_ssh_hosts', {}).get(selected_pod_id)
+
+            if cached_host:
+                # Build SSH command from cached host
+                ssh_cmd = f"ssh -i ~/.ssh/runpod_key -N -L 8000:localhost:8000 -L 5432:localhost:5432 {cached_host}@ssh.runpod.io"
+            else:
+                # Fallback to API query
+                ssh_cmd = manager.get_ssh_command(selected_pod_id)
+
             st.code(ssh_cmd, language="bash")
 
             # Action buttons
@@ -1623,6 +1642,11 @@ def page_deployment():
 
                 pod_id = pod['id']
                 ssh_host = pod['machine']['podHostId']
+
+                # Cache SSH host in session state for later retrieval
+                if 'pod_ssh_hosts' not in st.session_state:
+                    st.session_state.pod_ssh_hosts = {}
+                st.session_state.pod_ssh_hosts[pod_id] = ssh_host
 
                 progress.progress(40, text="Pod created! Waiting for ready state...")
 
