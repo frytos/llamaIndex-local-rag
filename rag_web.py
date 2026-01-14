@@ -7,18 +7,30 @@ Launch with: streamlit run rag_web.py
 
 import os
 import sys
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-import streamlit as st
-import plotly.express as px
-import plotly.graph_objects as go
-
 # Add the project root to path for imports
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# Load .env file BEFORE importing rag modules
+from dotenv import load_dotenv
+env_path = PROJECT_ROOT / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    # Try to load from config/.env as fallback
+    config_env = PROJECT_ROOT / "config" / ".env"
+    if config_env.exists():
+        load_dotenv(config_env)
+
+import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Import shared utilities
 from utils.naming import extract_model_short_name, generate_table_name
@@ -52,6 +64,15 @@ from sklearn.decomposition import PCA
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.schema import QueryBundle
 
+# RunPod deployment imports
+try:
+    from utils.runpod_manager import RunPodManager
+    from utils.ssh_tunnel import SSHTunnelManager
+    from utils.runpod_health import check_vllm_health, check_postgres_health
+    RUNPOD_AVAILABLE = True
+except ImportError:
+    RUNPOD_AVAILABLE = False
+
 # =============================================================================
 # Configuration
 # =============================================================================
@@ -59,6 +80,7 @@ from llama_index.core.schema import QueryBundle
 DATA_DIR = PROJECT_ROOT / "data"
 
 CHUNK_PRESETS = {
+    "Chat messages (300/50)": (300, 50),
     "Ultra-fine (100/20)": (100, 20),
     "Fine-grained (300/60)": (300, 60),
     "Balanced (700/150)": (700, 150),
@@ -71,6 +93,8 @@ EMBED_MODELS = {
     "bge-small-en (Recommended)": ("BAAI/bge-small-en", 384),
     "bge-base-en (Better)": ("BAAI/bge-base-en-v1.5", 768),
     "bge-large-en (Best)": ("BAAI/bge-large-en-v1.5", 1024),
+    "paraphrase-multilingual-MiniLM (Fast, Multilingual)": ("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", 384),
+    "bge-m3 (Best, Multilingual - FR/EN/etc)": ("BAAI/bge-m3", 1024),
 }
 
 # =============================================================================
@@ -111,6 +135,14 @@ def init_session_state():
 
         # Query state
         "query_history": [],
+
+        # RunPod deployment state
+        "runpod_api_key": os.environ.get("RUNPOD_API_KEY", ""),
+        "runpod_manager": None,
+        "active_pods": [],
+        "selected_pod": None,
+        "tunnel_active": False,
+        "last_pod_refresh": 0,
     }
 
     for key, value in defaults.items():
@@ -173,7 +205,7 @@ def list_vector_tables() -> List[Dict[str, Any]]:
 
         result = []
         for table in tables:
-            info = {"name": table, "rows": 0, "chunk_size": "?", "chunk_overlap": "?"}
+            info = {"name": table, "rows": 0, "chunk_size": "?", "chunk_overlap": "?", "embed_dim": "?"}
 
             # Get row count
             try:
@@ -185,12 +217,30 @@ def list_vector_tables() -> List[Dict[str, Any]]:
                 conn.rollback()
                 continue
 
+            # Get embedding dimension from column type
+            try:
+                cur.execute("""
+                    SELECT pg_catalog.format_type(a.atttypid, a.atttypmod) as data_type
+                    FROM pg_catalog.pg_attribute a
+                    JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
+                    WHERE c.relname = %s
+                      AND a.attname = 'embedding'
+                      AND NOT a.attisdropped
+                """, (table,))
+                row = cur.fetchone()
+                if row and row["data_type"] and "vector(" in row["data_type"]:
+                    # Extract dimension from "vector(N)" format
+                    info["embed_dim"] = int(row["data_type"].split("(")[1].split(")")[0])
+            except Exception as e:
+                pass  # Dimension query failed, keep default
+
             # Try to get metadata from first row
             try:
                 cur.execute(
                     sql.SQL("""
                         SELECT metadata_->>'_chunk_size' as cs,
-                               metadata_->>'_chunk_overlap' as co
+                               metadata_->>'_chunk_overlap' as co,
+                               metadata_->>'_embed_model' as em
                         FROM {}
                         WHERE metadata_->>'_chunk_size' IS NOT NULL
                         LIMIT 1
@@ -200,6 +250,8 @@ def list_vector_tables() -> List[Dict[str, Any]]:
                 if row:
                     info["chunk_size"] = row["cs"] or "?"
                     info["chunk_overlap"] = row["co"] or "?"
+                    if row["em"]:
+                        info["embed_model"] = row["em"]
             except Exception as e:
                 pass  # Metadata query failed, keep defaults
 
@@ -497,7 +549,15 @@ def page_index():
     embed_choice = st.selectbox("Model:", list(EMBED_MODELS.keys()), index=1)
     embed_model_name, embed_dim = EMBED_MODELS[embed_choice]
 
-    st.info(f"Model: `{embed_model_name}` | Dimensions: **{embed_dim}**")
+    # Backend selection
+    embed_backend = st.selectbox(
+        "Backend:",
+        ["huggingface", "mlx"],
+        index=0,
+        help="MLX is 9x faster on Apple Silicon (M1/M2/M3) - recommended for bge-m3"
+    )
+
+    st.info(f"Model: `{embed_model_name}` | Dimensions: **{embed_dim}** | Backend: **{embed_backend}**")
 
     # Table Name
     st.subheader("4. Index Name")
@@ -511,10 +571,10 @@ def page_index():
     st.subheader("5. Start Indexing")
 
     if st.button("🚀 Start Indexing", type="primary", use_container_width=True):
-        run_indexing(doc_path, table_name, chunk_size, chunk_overlap, embed_model_name, embed_dim, reset_table)
+        run_indexing(doc_path, table_name, chunk_size, chunk_overlap, embed_model_name, embed_dim, embed_backend, reset_table)
 
 def run_indexing(doc_path: Path, table_name: str, chunk_size: int, chunk_overlap: int,
-                 embed_model_name: str, embed_dim: int, reset_table: bool):
+                 embed_model_name: str, embed_dim: int, embed_backend: str, reset_table: bool):
     """Run the indexing pipeline with progress visualization."""
 
     # Update settings
@@ -525,6 +585,7 @@ def run_indexing(doc_path: Path, table_name: str, chunk_size: int, chunk_overlap
     rag.S.chunk_overlap = chunk_overlap
     rag.S.embed_model_name = embed_model_name
     rag.S.embed_dim = embed_dim
+    rag.S.embed_backend = embed_backend
     rag.S.reset_table = reset_table
 
     status = st.status("Indexing Pipeline", expanded=True)
@@ -581,7 +642,37 @@ def run_indexing(doc_path: Path, table_name: str, chunk_size: int, chunk_overlap
             embeddings_list = []
             for i, batch in enumerate(chunked(nodes, batch_size)):
                 texts = [n.get_content() for n in batch]
-                batch_embeddings = embed_model.get_text_embedding_batch(texts)
+
+                try:
+                    batch_embeddings = embed_model.get_text_embedding_batch(texts)
+
+                    # Verify batch size matches
+                    if len(batch_embeddings) != len(batch):
+                        st.warning(f"Batch {i+1}: Mismatch! Expected {len(batch)}, got {len(batch_embeddings)}. Retrying individually...")
+
+                        # Fallback: embed one by one
+                        batch_embeddings = []
+                        for text in texts:
+                            try:
+                                emb = embed_model.get_text_embedding(text)
+                                batch_embeddings.append(emb)
+                            except Exception as e:
+                                st.error(f"Failed to embed text: {str(e)[:100]}")
+                                # Use zero vector as fallback
+                                batch_embeddings.append([0.0] * embed_dim)
+
+                except Exception as e:
+                    st.error(f"Batch {i+1} failed: {e}. Trying individual embeddings...")
+
+                    # Fallback to individual embedding
+                    batch_embeddings = []
+                    for text in texts:
+                        try:
+                            emb = embed_model.get_text_embedding(text)
+                            batch_embeddings.append(emb)
+                        except Exception as e2:
+                            st.error(f"Individual embedding failed: {str(e2)[:100]}")
+                            batch_embeddings.append([0.0] * embed_dim)
 
                 for node, emb in zip(batch, batch_embeddings):
                     node.embedding = emb
@@ -676,6 +767,127 @@ def run_indexing(doc_path: Path, table_name: str, chunk_size: int, chunk_overlap
             dimensions=viz_dims,
         )
 
+def search_chunks(table_name: str, query: str, top_k: int, embed_model_name: str,
+                  embed_dim: int, embed_backend: str):
+    """Search and display chunks only (no LLM generation)."""
+
+    import rag_low_level_m1_16gb_verbose as rag
+    rag.S.table = table_name
+    rag.S.top_k = top_k
+    rag.S.embed_model_name = embed_model_name
+    rag.S.embed_dim = embed_dim
+    rag.S.embed_backend = embed_backend
+
+    st.subheader(f"🔍 Top {top_k} Chunks for: \"{query}\"")
+
+    with st.spinner("Retrieving chunks..."):
+        try:
+            # Build retriever
+            embed_model = get_embed_model(embed_model_name)
+            vector_store = make_vector_store()
+            retriever = VectorDBRetriever(vector_store, embed_model, similarity_top_k=top_k)
+
+            # Retrieve chunks
+            from llama_index.core import QueryBundle
+            results = retriever._retrieve(QueryBundle(query_str=query))
+
+            if not results:
+                st.warning("No results found.")
+                return
+
+            # Display results
+            st.success(f"✅ Found {len(results)} chunks")
+
+            # Statistics
+            scores = [r.score for r in results]
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Best Score", f"{max(scores):.4f}")
+            with col2:
+                st.metric("Avg Score", f"{sum(scores)/len(scores):.4f}")
+            with col3:
+                st.metric("Worst Score", f"{min(scores):.4f}")
+            with col4:
+                quality = "🟢 Excellent" if max(scores) > 0.7 else "🟡 Good" if max(scores) > 0.5 else "🟠 Fair" if max(scores) > 0.3 else "🔴 Low"
+                st.metric("Quality", quality)
+
+            st.divider()
+
+            # Display each chunk
+            for i, result in enumerate(results):
+                score = result.score
+                meta = result.node.metadata or {}
+
+                # Color coding
+                if score > 0.7:
+                    badge = "🟢 Excellent"
+                    score_color = "green"
+                elif score > 0.5:
+                    badge = "🟡 Good"
+                    score_color = "orange"
+                elif score > 0.3:
+                    badge = "🟠 Fair"
+                    score_color = "orange"
+                else:
+                    badge = "🔴 Low"
+                    score_color = "red"
+
+                with st.expander(f"**Chunk {i+1}:** {badge} (Score: {score:.4f})", expanded=(i < 3)):
+                    # Metadata panel
+                    col1, col2 = st.columns([1, 2])
+
+                    with col1:
+                        st.markdown("**📊 Metadata:**")
+                        st.metric("Similarity Score", f"{score:.4f}")
+
+                        # Show participants if available
+                        participants = meta.get('_participants', meta.get('participants', []))
+                        if participants:
+                            if isinstance(participants, str):
+                                import json
+                                try:
+                                    participants = json.loads(participants)
+                                except:
+                                    participants = [participants]
+                            st.markdown(f"**👥 Participants:**")
+                            for p in participants[:5]:
+                                st.caption(f"• {p}")
+
+                        # Show dates if available
+                        primary_date = meta.get('_primary_date')
+                        if primary_date:
+                            st.markdown(f"**📅 Date:** {primary_date}")
+
+                        # Content type
+                        content_type = meta.get('_content_type')
+                        if content_type:
+                            st.caption(f"Type: {content_type}")
+
+                        # Chunk config
+                        chunk_size = meta.get('_chunk_size')
+                        if chunk_size:
+                            st.caption(f"Chunk: {chunk_size} chars")
+
+                    with col2:
+                        st.markdown("**📝 Content:**")
+                        text = result.node.get_content()
+                        # Truncate very long chunks for display
+                        if len(text) > 1000:
+                            st.text_area("", value=text, height=300, disabled=True, label_visibility="collapsed")
+                        else:
+                            st.text(text)
+
+                        # Source file
+                        source = meta.get("file_path", meta.get("source", "Unknown"))
+                        if source:
+                            st.caption(f"📁 Source: {Path(source).name}")
+
+        except Exception as e:
+            st.error(f"Search error: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+
+
 def page_query():
     """Query page."""
     st.header("Query Index")
@@ -687,33 +899,98 @@ def page_query():
         st.warning("No indexes found. Please index some documents first.")
         return
 
-    # Index selection
-    st.subheader("1. Select Index")
+    # Compact layout: Index selection + metrics in one row
+    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
 
-    index_options = [f"{idx['name']} ({idx['rows']} chunks, cs={idx['chunk_size']})" for idx in indexes]
-    selected_idx = st.selectbox("Index:", index_options)
-    table_name = indexes[index_options.index(selected_idx)]["name"]
-
-    # Query parameters
-    st.subheader("2. Query Settings")
-
-    col1, col2 = st.columns(2)
     with col1:
-        top_k = st.slider("TOP_K (chunks to retrieve):", 1, 10, 4)
+        index_options = [f"{idx['name']} ({idx['rows']} chunks, cs={idx['chunk_size']}, dim={idx['embed_dim']})" for idx in indexes]
+        selected_idx = st.selectbox("**Index**", index_options, label_visibility="visible")
+        selected_index = indexes[index_options.index(selected_idx)]
+        table_name = selected_index["name"]
+
+        # Strip 'data_' prefix if present (PGVectorStore adds it automatically)
+        if table_name.startswith("data_"):
+            table_name = table_name[5:]  # Remove 'data_' prefix
+
+        table_dim = selected_index.get("embed_dim", "?")
+        table_model = selected_index.get("embed_model", "unknown")
+
     with col2:
-        show_sources = st.checkbox("Show source chunks", value=True)
+        st.metric("Chunks", f"{selected_index['rows']:,}", label_visibility="visible")
+    with col3:
+        st.metric("Chunk Size", selected_index['chunk_size'], label_visibility="visible")
+    with col4:
+        st.metric("Dim", table_dim, label_visibility="visible")
 
-    # Query input
-    st.subheader("3. Ask a Question")
+    # Query Settings: More compact layout
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
-    query = st.text_area("Your question:", height=100, placeholder="What is the main topic of the document?")
+    with col1:
+        # Embedding model selection based on table dimension
+        if isinstance(table_dim, int):
+            # Filter models by dimension
+            compatible_models = {k: v for k, v in EMBED_MODELS.items() if v[1] == table_dim}
 
-    if st.button("🔍 Search", type="primary", use_container_width=True):
+            if compatible_models:
+                embed_choice = st.selectbox(
+                    "**Embedding Model**",
+                    list(compatible_models.keys()),
+                    help=f"✓ {len(compatible_models)} compatible model(s) for {table_dim}D"
+                )
+                embed_model_name, embed_dim = compatible_models[embed_choice]
+            else:
+                st.error(f"⚠️ No models found for {table_dim}D!")
+                embed_choice = st.selectbox("**Embedding Model**", list(EMBED_MODELS.keys()), index=1)
+                embed_model_name, embed_dim = EMBED_MODELS[embed_choice]
+        else:
+            embed_choice = st.selectbox("**Embedding Model**", list(EMBED_MODELS.keys()), index=1)
+            embed_model_name, embed_dim = EMBED_MODELS[embed_choice]
+
+    with col2:
+        embed_backend = st.selectbox(
+            "**Backend**",
+            ["huggingface", "mlx"],
+            index=1 if embed_dim == 1024 else 0,
+            help="MLX is 9x faster on Apple Silicon"
+        )
+
+    with col3:
+        top_k = st.number_input("**TOP_K**", min_value=1, max_value=20, value=4, help="Chunks to retrieve")
+
+    with col4:
+        st.write("**Options**")
+        show_sources = st.checkbox("Show sources", value=True)
+
+    # Dimension mismatch warning (compact)
+    if isinstance(table_dim, int) and embed_dim != table_dim:
+        st.error(f"🚨 Dimension mismatch: Table={table_dim}D, Model={embed_dim}D - Select compatible model!")
+
+    # Query input (compact height)
+    query = st.text_area("**Your Question:**", height=80, placeholder="What is the main topic of the document?")
+
+    # Search buttons side by side
+    col1, col2 = st.columns(2)
+
+    with col1:
+        search_and_answer = st.button("🔍 Search & Answer", type="primary", use_container_width=True)
+
+    with col2:
+        search_chunks_only = st.button("📄 Search Chunks Only", use_container_width=True)
+
+    if search_and_answer or search_chunks_only:
         if not query.strip():
             st.warning("Please enter a question")
             return
 
-        run_query(table_name, query, top_k, show_sources)
+        # Check for dimension mismatch before running
+        if isinstance(table_dim, int) and embed_dim != table_dim:
+            st.error("Cannot run query - dimension mismatch detected. Please select a compatible model.")
+            return
+
+        if search_chunks_only:
+            search_chunks(table_name, query, top_k, embed_model_name, embed_dim, embed_backend)
+        else:
+            run_query(table_name, query, top_k, show_sources, embed_model_name, embed_dim, embed_backend)
 
     # Query history
     if st.session_state.query_history:
@@ -723,17 +1000,21 @@ def page_query():
                 st.write(f"**Answer:** {item['answer']}")
                 st.caption(f"Top score: {item['top_score']:.4f} | Chunks: {item['chunks']}")
 
-def run_query(table_name: str, query: str, top_k: int, show_sources: bool):
+def run_query(table_name: str, query: str, top_k: int, show_sources: bool,
+              embed_model_name: str, embed_dim: int, embed_backend: str):
     """Run a query against the index."""
 
     import rag_low_level_m1_16gb_verbose as rag
     rag.S.table = table_name
     rag.S.top_k = top_k
+    rag.S.embed_model_name = embed_model_name
+    rag.S.embed_dim = embed_dim
+    rag.S.embed_backend = embed_backend
 
     with st.spinner("Searching..."):
         try:
-            # Build retriever
-            embed_model = get_embed_model(rag.S.embed_model_name)
+            # Build retriever with specified embedding model
+            embed_model = get_embed_model(embed_model_name)
             vector_store = make_vector_store()
             retriever = VectorDBRetriever(vector_store, embed_model, similarity_top_k=top_k)
 
@@ -741,6 +1022,8 @@ def run_query(table_name: str, query: str, top_k: int, show_sources: bool):
             results = retriever._retrieve(QueryBundle(query_str=query))
         except Exception as e:
             st.error(f"Retrieval error: {e}")
+            import traceback
+            st.code(traceback.format_exc())
             return
 
     # Display retrieved chunks
@@ -821,7 +1104,13 @@ def page_view_indexes():
 
     # Index table
     df = pd.DataFrame(indexes)
-    df.columns = ["Name", "Chunks", "Chunk Size", "Overlap"]
+    # Rename columns based on available fields
+    if "embed_dim" in df.columns:
+        df = df[["name", "rows", "chunk_size", "chunk_overlap", "embed_dim"]]
+        df.columns = ["Name", "Chunks", "Chunk Size", "Overlap", "Embed Dim"]
+    else:
+        df = df[["name", "rows", "chunk_size", "chunk_overlap"]]
+        df.columns = ["Name", "Chunks", "Chunk Size", "Overlap"]
 
     st.dataframe(df, use_container_width=True, hide_index=True)
 
@@ -927,6 +1216,598 @@ def page_settings():
         st.session_state.llm = None
         st.success("Caches cleared!")
 
+def page_deployment():
+    """RunPod deployment management page."""
+    st.header("☁️ RunPod Deployment")
+
+    if not RUNPOD_AVAILABLE:
+        st.error("❌ RunPod utilities not available")
+        st.info("Install with: `pip install runpod`")
+        return
+
+    # =========================================================================
+    # Section 1: API Configuration
+    # =========================================================================
+    st.subheader("1. API Configuration")
+
+    api_key = st.text_input(
+        "RunPod API Key",
+        value=st.session_state.runpod_api_key,
+        type="password",
+        help="Get your API key from https://runpod.io/settings",
+        key="api_key_input"
+    )
+
+    if api_key and api_key != st.session_state.runpod_api_key:
+        st.session_state.runpod_api_key = api_key
+        st.session_state.runpod_manager = None  # Reset manager
+
+    if not api_key:
+        st.warning("⚠️ Enter your RunPod API key to continue")
+        st.markdown("[Get API Key →](https://runpod.io/settings)")
+        return
+
+    # Initialize manager
+    try:
+        if st.session_state.runpod_manager is None:
+            with st.spinner("Initializing RunPod API..."):
+                st.session_state.runpod_manager = RunPodManager(api_key=api_key)
+        manager = st.session_state.runpod_manager
+        st.success("✅ API key validated")
+    except Exception as e:
+        st.error(f"❌ Invalid API key: {e}")
+        return
+
+    st.divider()
+
+    # =========================================================================
+    # Section 2: Existing Pods
+    # =========================================================================
+    st.subheader("2. Existing Pods")
+
+    # Refresh button
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🔄 Refresh", key="refresh_pods"):
+            st.session_state.last_pod_refresh = time.time()
+
+    # Get pods
+    try:
+        with st.spinner("Loading pods..."):
+            pods = manager.list_pods()
+            st.session_state.active_pods = pods
+    except Exception as e:
+        st.error(f"Failed to load pods: {e}")
+        pods = []
+
+    if pods:
+        # Create dataframe for display
+        pod_data = []
+        for pod in pods:
+            runtime = pod.get('runtime', {})
+            machine = pod.get('machine', {})
+
+            pod_data.append({
+                "Name": pod.get('name', 'N/A'),
+                "Status": runtime.get('containerState', 'unknown'),
+                "GPU": machine.get('gpuTypeId', 'N/A'),
+                "Uptime": f"{runtime.get('uptimeInSeconds', 0) // 60}min",
+                "Cost/hr": f"${pod.get('costPerHr', 0):.2f}",
+                "ID": pod.get('id', '')[:12] + "..."
+            })
+
+        df = pd.DataFrame(pod_data)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # Pod management
+        st.write("**Manage Pod:**")
+
+        pod_names = {pod['id']: pod['name'] for pod in pods}
+        selected_pod_id = st.selectbox(
+            "Select pod",
+            options=list(pod_names.keys()),
+            format_func=lambda x: pod_names[x],
+            key="pod_selector"
+        )
+
+        st.session_state.selected_pod = selected_pod_id
+
+        # Get detailed status
+        if selected_pod_id:
+            with st.spinner("Getting pod status..."):
+                status = manager.get_pod_status(selected_pod_id)
+
+            # Display status
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.metric("Status", status['status'])
+            with col2:
+                st.metric("GPU Usage", f"{status['gpu_utilization']}%")
+            with col3:
+                st.metric("Uptime", f"{status['uptime_seconds'] // 60}min")
+            with col4:
+                st.metric("Cost/hr", f"${status['cost_per_hour']:.2f}")
+
+            # SSH connection info
+            ssh_cmd = manager.get_ssh_command(selected_pod_id)
+            st.code(ssh_cmd, language="bash")
+
+            # Action buttons
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                if st.button("▶️ Resume", disabled=status['status'] == 'running', key="btn_resume"):
+                    with st.spinner("Resuming pod..."):
+                        if manager.resume_pod(selected_pod_id):
+                            st.success("✅ Pod resumed!")
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to resume")
+
+            with col2:
+                if st.button("⏸️ Stop", disabled=status['status'] != 'running', key="btn_stop"):
+                    with st.spinner("Stopping pod..."):
+                        if manager.stop_pod(selected_pod_id):
+                            st.success("✅ Pod stopped! No longer incurring GPU costs.")
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to stop")
+
+            with col3:
+                if st.button("🔄 Restart", disabled=status['status'] != 'running', key="btn_restart"):
+                    with st.spinner("Restarting pod..."):
+                        if manager.stop_pod(selected_pod_id):
+                            time.sleep(5)
+                            if manager.resume_pod(selected_pod_id):
+                                st.success("✅ Pod restarted!")
+                                st.rerun()
+
+            with col4:
+                terminate_confirm = st.checkbox("Confirm", key="terminate_confirm")
+                if st.button("🗑️ Terminate", disabled=not terminate_confirm, key="btn_terminate"):
+                    with st.spinner("Terminating pod..."):
+                        if manager.terminate_pod(selected_pod_id):
+                            st.success("✅ Pod terminated")
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to terminate")
+
+    else:
+        st.info("No existing pods found")
+
+    st.divider()
+
+    # =========================================================================
+    # Section 3: Create New Pod
+    # =========================================================================
+    st.subheader("3. Deploy New Pod")
+
+    with st.expander("Pod Configuration", expanded=True):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            pod_name = st.text_input(
+                "Pod Name",
+                value=f"rag-pipeline-{int(time.time())}",
+                help="Unique name for your pod"
+            )
+
+            gpu_type = st.selectbox(
+                "GPU Type",
+                options=[
+                    "NVIDIA RTX 4090",
+                    "NVIDIA RTX 4070 Ti",
+                    "NVIDIA RTX 3090",
+                    "NVIDIA A100 40GB"
+                ],
+                index=0,
+                help="RTX 4090 recommended for best price/performance"
+            )
+
+        with col2:
+            volume_gb = st.number_input(
+                "Storage (GB)",
+                min_value=50,
+                max_value=500,
+                value=100,
+                step=50,
+                help="Persistent storage for models and data"
+            )
+
+            container_disk_gb = st.number_input(
+                "Container Disk (GB)",
+                min_value=20,
+                max_value=100,
+                value=50,
+                step=10,
+                help="Ephemeral container storage"
+            )
+
+    with st.expander("Advanced Configuration"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            vllm_model = st.selectbox(
+                "vLLM Model",
+                options=[
+                    "TheBloke/Mistral-7B-Instruct-v0.2-AWQ",
+                    "mistralai/Mistral-7B-Instruct-v0.2",
+                    "TheBloke/Llama-2-7B-Chat-AWQ"
+                ],
+                index=0
+            )
+
+            embed_model = st.selectbox(
+                "Embedding Model",
+                options=[
+                    "BAAI/bge-small-en",
+                    "BAAI/bge-base-en-v1.5",
+                    "BAAI/bge-m3"
+                ],
+                index=0
+            )
+
+        with col2:
+            ctx_size = st.selectbox(
+                "Context Window",
+                options=[3072, 4096, 8192, 16384],
+                index=2
+            )
+
+            top_k = st.slider(
+                "Top K Retrieval",
+                min_value=1,
+                max_value=20,
+                value=5,
+                help="Number of chunks to retrieve"
+            )
+
+    # Cost estimation
+    st.write("**Cost Estimation:**")
+
+    gpu_costs = {
+        "NVIDIA RTX 4090": 0.50,
+        "NVIDIA RTX 4070 Ti": 0.29,
+        "NVIDIA RTX 3090": 0.24,
+        "NVIDIA A100 40GB": 1.50
+    }
+
+    cost_per_hour = gpu_costs.get(gpu_type, 0.50)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Hourly", f"${cost_per_hour:.2f}")
+    with col2:
+        st.metric("Daily (8h)", f"${cost_per_hour * 8:.2f}")
+    with col3:
+        st.metric("Monthly (8h/day)", f"${cost_per_hour * 8 * 30:.2f}")
+
+    # Deploy button
+    if st.button("🚀 Deploy Pod", type="primary", key="deploy_button"):
+        with st.spinner("Creating pod... This may take 2-3 minutes"):
+            progress = st.progress(0, text="Initializing deployment...")
+
+            try:
+                # Create pod
+                progress.progress(10, text="Creating pod on RunPod...")
+
+                custom_env = {
+                    "USE_VLLM": "1",
+                    "VLLM_MODEL": vllm_model,
+                    "EMBED_MODEL": embed_model,
+                    "CTX": str(ctx_size),
+                    "TOP_K": str(top_k)
+                }
+
+                pod = manager.create_pod(
+                    name=pod_name,
+                    gpu_type=gpu_type,
+                    volume_gb=volume_gb,
+                    container_disk_gb=container_disk_gb,
+                    env=custom_env
+                )
+
+                if not pod:
+                    st.error("❌ Failed to create pod")
+                    return
+
+                pod_id = pod['id']
+                ssh_host = pod['machine']['podHostId']
+
+                progress.progress(40, text="Pod created! Waiting for ready state...")
+
+                # Wait for ready
+                start_time = time.time()
+                timeout = 300  # 5 minutes
+
+                while time.time() - start_time < timeout:
+                    status = manager.get_pod_status(pod_id)
+
+                    if status['status'] == 'running':
+                        break
+
+                    elapsed = time.time() - start_time
+                    progress_pct = min(40 + int((elapsed / timeout) * 50), 90)
+                    progress.progress(
+                        progress_pct,
+                        text=f"Waiting for pod... Status: {status['status']}"
+                    )
+
+                    time.sleep(5)
+
+                if status['status'] != 'running':
+                    st.warning("⚠️ Pod created but not running yet. Check status manually.")
+                else:
+                    progress.progress(100, text="✅ Deployment complete!")
+
+                    st.success("🎉 Pod deployed successfully!")
+
+                    st.info(f"""
+                    **Pod Details:**
+                    - **ID**: `{pod_id}`
+                    - **Name**: {pod_name}
+                    - **GPU**: {gpu_type}
+                    - **SSH**: `ssh {ssh_host}@ssh.runpod.io`
+
+                    **Next Steps:**
+                    1. SSH into pod and initialize services:
+                       ```bash
+                       ssh {ssh_host}@ssh.runpod.io
+                       bash /workspace/rag-pipeline/scripts/init_runpod_services.sh
+                       ```
+
+                    2. Create SSH tunnel (new terminal):
+                       ```bash
+                       ssh -L 8000:localhost:8000 -L 5432:localhost:5432 {ssh_host}@ssh.runpod.io
+                       ```
+
+                    3. Test vLLM: `curl http://localhost:8000/health`
+
+                    4. Run queries using the "Query" tab!
+                    """)
+
+                    st.balloons()
+
+                    # Refresh pod list
+                    time.sleep(2)
+                    st.rerun()
+
+            except Exception as e:
+                st.error(f"❌ Deployment failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+
+    st.divider()
+
+    # =========================================================================
+    # Section 4: SSH Tunnel Management
+    # =========================================================================
+    st.subheader("4. SSH Tunnel Management")
+
+    if pods and selected_pod_id:
+        st.write(f"**Tunnel for**: {pod_names[selected_pod_id]}")
+
+        # Get SSH host
+        status = manager.get_pod_status(selected_pod_id)
+        ssh_host = status['ssh_host']
+
+        # Port selection
+        port_options = {
+            "vLLM Server (8000)": 8000,
+            "PostgreSQL (5432)": 5432,
+            "Grafana (3000)": 3000
+        }
+
+        selected_ports = st.multiselect(
+            "Ports to forward",
+            options=list(port_options.keys()),
+            default=["vLLM Server (8000)", "PostgreSQL (5432)"],
+            key="tunnel_ports"
+        )
+
+        ports = [port_options[p] for p in selected_ports]
+
+        # Generate SSH command
+        if ports:
+            port_forwards = " ".join([f"-L {p}:localhost:{p}" for p in ports])
+            ssh_cmd = f"ssh -N {port_forwards} {ssh_host}@ssh.runpod.io"
+
+            st.write("**SSH Tunnel Command:**")
+            st.code(ssh_cmd, language="bash")
+
+            st.info("""
+            💡 **How to use**:
+            1. Copy command above
+            2. Run in new terminal
+            3. Keep running while using services
+            4. Access services at `localhost:PORT`
+            """)
+
+            # Quick test buttons
+            if 8000 in ports:
+                if st.button("Test vLLM (requires tunnel)", key="test_vllm"):
+                    vllm_status = check_vllm_health()
+                    if vllm_status['status'] == 'healthy':
+                        st.success(f"✅ vLLM is healthy! Latency: {vllm_status['latency_ms']}ms")
+                    else:
+                        st.error(f"❌ vLLM: {vllm_status.get('error', 'Unreachable')}")
+
+            if 5432 in ports:
+                if st.button("Test PostgreSQL (requires tunnel)", key="test_pg"):
+                    pg_status = check_postgres_health()
+                    if pg_status['status'] == 'healthy':
+                        st.success("✅ PostgreSQL is healthy!")
+                        if pg_status.get('pgvector'):
+                            st.success("✅ pgvector extension installed")
+                    else:
+                        st.error(f"❌ PostgreSQL: {pg_status.get('error', 'Unreachable')}")
+
+    else:
+        st.info("Create a pod first to manage SSH tunnels")
+
+    st.divider()
+
+    # =========================================================================
+    # Section 5: Cost Dashboard
+    # =========================================================================
+    st.subheader("5. Cost Dashboard")
+
+    if pods:
+        # Calculate total running cost
+        total_cost_hr = sum(
+            pod.get('costPerHr', 0)
+            for pod in pods
+            if pod.get('runtime', {}).get('containerState') == 'running'
+        )
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric("Active Pods", len([p for p in pods if p.get('runtime', {}).get('containerState') == 'running']))
+        with col2:
+            st.metric("Hourly Cost", f"${total_cost_hr:.2f}")
+        with col3:
+            st.metric("Daily (Current)", f"${total_cost_hr * 24:.2f}")
+        with col4:
+            st.metric("Monthly (Current)", f"${total_cost_hr * 24 * 30:.2f}")
+
+        # Cost breakdown by pod
+        st.write("**Cost Breakdown:**")
+
+        cost_data = []
+        for pod in pods:
+            runtime = pod.get('runtime', {})
+            state = runtime.get('containerState', 'unknown')
+
+            if state == 'running':
+                cost = pod.get('costPerHr', 0)
+                uptime = runtime.get('uptimeInSeconds', 0)
+                hours_running = uptime / 3600
+
+                cost_data.append({
+                    "Pod": pod['name'],
+                    "Cost/hr": f"${cost:.2f}",
+                    "Uptime": f"{uptime // 60}min",
+                    "Cost So Far": f"${cost * hours_running:.2f}"
+                })
+
+        if cost_data:
+            df_cost = pd.DataFrame(cost_data)
+            st.dataframe(df_cost, use_container_width=True, hide_index=True)
+
+            # Projection chart
+            st.write("**Cost Projection:**")
+
+            hours_options = list(range(1, 25))
+            costs_daily = [total_cost_hr * h for h in hours_options]
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=hours_options,
+                y=costs_daily,
+                mode='lines+markers',
+                name='Daily Cost',
+                line=dict(color='#FF4B4B', width=3)
+            ))
+
+            fig.update_layout(
+                title="Cost vs Usage (Daily)",
+                xaxis_title="Hours per Day",
+                yaxis_title="Daily Cost ($)",
+                template="plotly_white",
+                height=300
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        else:
+            st.info("No running pods. No current costs.")
+
+    else:
+        st.info("No pods to track costs for")
+
+    st.divider()
+
+    # =========================================================================
+    # Section 6: Quick Actions
+    # =========================================================================
+    st.subheader("6. Quick Actions")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        if st.button("📊 List Available GPUs", key="list_gpus"):
+            with st.spinner("Fetching GPU types..."):
+                try:
+                    gpus = manager.list_available_gpus()
+
+                    if gpus:
+                        st.write("**Available GPUs:**")
+
+                        gpu_data = []
+                        for gpu in gpus[:10]:  # Show top 10
+                            lowest_price = gpu.get('lowestPrice', {})
+                            price = lowest_price.get('uninterruptablePrice', 0)
+
+                            gpu_data.append({
+                                "GPU": gpu['displayName'],
+                                "Memory": f"{gpu['memoryInGb']}GB",
+                                "Price/hr": f"${price:.2f}"
+                            })
+
+                        df_gpu = pd.DataFrame(gpu_data)
+                        st.dataframe(df_gpu, use_container_width=True, hide_index=True)
+                    else:
+                        st.warning("No GPU data available")
+
+                except Exception as e:
+                    st.error(f"Failed to fetch GPUs: {e}")
+
+    with col2:
+        if st.button("💰 Estimate Costs", key="estimate_costs"):
+            st.write("**Monthly Cost Scenarios:**")
+
+            scenarios = [
+                ("Development (2h/day)", 2),
+                ("Testing (4h/day)", 4),
+                ("Production (8h/day)", 8),
+                ("24/7", 24)
+            ]
+
+            cost_scenarios = []
+            for scenario_name, hours in scenarios:
+                costs = manager.estimate_cost(hours, cost_per_hour=0.50)
+                cost_scenarios.append({
+                    "Scenario": scenario_name,
+                    "Hours/Day": hours,
+                    "Monthly Cost": f"${costs['total_cost']:.2f}"
+                })
+
+            df_scenarios = pd.DataFrame(cost_scenarios)
+            st.dataframe(df_scenarios, use_container_width=True, hide_index=True)
+
+    with col3:
+        if st.button("🔍 System Health", key="health_check"):
+            st.write("**Health Check:**")
+
+            # vLLM
+            vllm_health = check_vllm_health()
+            if vllm_health['status'] == 'healthy':
+                st.success(f"✅ vLLM: {vllm_health['status']} ({vllm_health['latency_ms']}ms)")
+            else:
+                st.error(f"❌ vLLM: {vllm_health.get('error', 'unreachable')}")
+
+            # PostgreSQL
+            pg_health = check_postgres_health()
+            if pg_health['status'] == 'healthy':
+                st.success("✅ PostgreSQL: healthy")
+            else:
+                st.error(f"❌ PostgreSQL: {pg_health.get('error', 'unreachable')}")
+
 # =============================================================================
 # Main App
 # =============================================================================
@@ -940,7 +1821,7 @@ def main():
 
     page = st.sidebar.radio(
         "Navigation",
-        ["Index Documents", "Query", "View Indexes", "Settings"],
+        ["Index Documents", "Query", "View Indexes", "Settings", "☁️ RunPod Deployment"],
     )
 
     st.sidebar.divider()
@@ -963,6 +1844,8 @@ def main():
         page_view_indexes()
     elif page == "Settings":
         page_settings()
+    elif page == "☁️ RunPod Deployment":
+        page_deployment()
 
 if __name__ == "__main__":
     main()
