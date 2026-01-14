@@ -32,6 +32,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, List, Optional, Tuple
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    # python-dotenv not installed, rely on manual export
+    pass
+
 # Third-party imports
 import psycopg2
 from psycopg2 import OperationalError as PgOperationalError
