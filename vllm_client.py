@@ -77,6 +77,9 @@ def build_vllm_client(
         model=model,  # Must match vLLM server's loaded model
         temperature=temperature,
         max_tokens=max_tokens,
+        is_chat_model=True,  # Treat as chat model
+        context_window=32768,  # Set large context (vLLM will handle it)
+        is_function_calling_model=False,  # Disable function calling validation
     )
 
     # Log actual model for reference
