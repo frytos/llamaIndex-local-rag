@@ -135,7 +135,7 @@ class RunPodManager:
         name: str = "rag-pipeline-vllm",
         gpu_type: str = "NVIDIA RTX 4090",
         gpu_count: int = 1,
-        image: str = "runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04",
+        image: str = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
         volume_gb: int = 100,
         container_disk_gb: int = 50,
         ports: str = "5432/tcp,8000/http,22/tcp,3000/http",
