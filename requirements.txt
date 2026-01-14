@@ -42,6 +42,11 @@ llama-index-workflows==2.11.5
 llama_cpp_python==0.3.16          # Local LLM inference (llama.cpp)
 
 # ----------------------------------------------------------------------------
+# Cloud GPU Management
+# ----------------------------------------------------------------------------
+runpod>=1.7.5                     # RunPod API for GPU pod management
+
+# ----------------------------------------------------------------------------
 # Embeddings & Machine Learning
 # (Used for embeddings, reranking, semantic cache, query expansion, metadata)
 # ----------------------------------------------------------------------------
@@ -187,3 +192,8 @@ banks==2.2.0                      # Banking data
 charset-normalizer==3.4.4         # Character encoding detection
 filetype==1.2.0                   # File type detection
 hf-xet==1.2.0                     # HuggingFace XET
+
+# ----------------------------------------------------------------------------
+# Monitoring & Observability
+# ----------------------------------------------------------------------------
+prometheus-client==0.23.1         # Prometheus metrics export
