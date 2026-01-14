@@ -1284,8 +1284,9 @@ def page_deployment():
         # Create dataframe for display
         pod_data = []
         for pod in pods:
-            runtime = pod.get('runtime', {})
-            machine = pod.get('machine', {})
+            # Handle None values from API
+            runtime = pod.get('runtime') or {}
+            machine = pod.get('machine') or {}
 
             pod_data.append({
                 "Name": pod.get('name', 'N/A'),
@@ -1396,17 +1397,23 @@ def page_deployment():
                 help="Unique name for your pod"
             )
 
-            gpu_type = st.selectbox(
+            # GPU type mapping: display name -> RunPod GPU ID
+            gpu_options = {
+                "RTX 4090 ($0.50/hr) - Recommended": "NVIDIA GeForce RTX 4090",
+                "RTX 4070 Ti ($0.29/hr) - Budget": "NVIDIA GeForce RTX 4070 Ti",
+                "RTX 3090 ($0.24/hr) - Cheapest": "NVIDIA GeForce RTX 3090",
+                "A100 40GB ($1.50/hr) - Overkill": "NVIDIA A100 40GB PCIe"
+            }
+
+            gpu_display = st.selectbox(
                 "GPU Type",
-                options=[
-                    "NVIDIA RTX 4090",
-                    "NVIDIA RTX 4070 Ti",
-                    "NVIDIA RTX 3090",
-                    "NVIDIA A100 40GB"
-                ],
+                options=list(gpu_options.keys()),
                 index=0,
                 help="RTX 4090 recommended for best price/performance"
             )
+
+            # Get actual GPU ID for RunPod API
+            gpu_type = gpu_options[gpu_display]
 
         with col2:
             volume_gb = st.number_input(
@@ -1426,6 +1433,59 @@ def page_deployment():
                 step=10,
                 help="Ephemeral container storage"
             )
+
+    # GitHub Auto-Setup Section
+    with st.expander("🚀 GitHub Auto-Setup (Recommended)", expanded=True):
+        st.markdown("""
+        Enable this to **automatically clone your repo and initialize all services** when the pod starts!
+
+        The pod will:
+        1. Clone your GitHub repository
+        2. Install PostgreSQL + pgvector
+        3. Set up Python environment
+        4. Start vLLM server
+        5. Be fully ready to use (~10-15 minutes after creation)
+        """)
+
+        enable_auto_setup = st.checkbox(
+            "Enable automatic GitHub setup",
+            value=True,
+            help="Highly recommended! Pod will be fully initialized when ready."
+        )
+
+        if enable_auto_setup:
+            # Get defaults from environment variables
+            default_repo = os.getenv("GITHUB_REPO_URL", "https://github.com/YOUR_USERNAME/llamaIndex-local-rag.git")
+            default_branch = os.getenv("GITHUB_BRANCH", "main")
+            default_use_token = os.getenv("USE_GITHUB_TOKEN", "0") == "1"
+
+            github_repo = st.text_input(
+                "GitHub Repository URL",
+                value=default_repo,
+                help="Your repository URL (public or private with token)"
+            )
+
+            col1, col2 = st.columns(2)
+            with col1:
+                github_branch = st.text_input(
+                    "Branch",
+                    value=default_branch,
+                    help="Git branch to clone"
+                )
+            with col2:
+                use_github_token = st.checkbox(
+                    "Use GitHub Token (for private repos)",
+                    value=default_use_token,
+                    help="Uses GH_TOKEN secret from RunPod if available"
+                )
+
+            if use_github_token:
+                st.info("💡 Make sure you've added GH_TOKEN secret in RunPod settings")
+        else:
+            # Set defaults when auto-setup is disabled
+            github_repo = ""
+            github_branch = "main"
+            use_github_token = False
 
     with st.expander("Advanced Configuration"):
         col1, col2 = st.columns(2)
@@ -1470,10 +1530,10 @@ def page_deployment():
     st.write("**Cost Estimation:**")
 
     gpu_costs = {
-        "NVIDIA RTX 4090": 0.50,
-        "NVIDIA RTX 4070 Ti": 0.29,
-        "NVIDIA RTX 3090": 0.24,
-        "NVIDIA A100 40GB": 1.50
+        "NVIDIA GeForce RTX 4090": 0.50,
+        "NVIDIA GeForce RTX 4070 Ti": 0.29,
+        "NVIDIA GeForce RTX 3090": 0.24,
+        "NVIDIA A100 40GB PCIe": 1.50
     }
 
     cost_per_hour = gpu_costs.get(gpu_type, 0.50)
@@ -1503,12 +1563,58 @@ def page_deployment():
                     "TOP_K": str(top_k)
                 }
 
+                # Build docker_args for auto-setup
+                docker_startup_cmd = None
+
+                if enable_auto_setup and github_repo and "YOUR_USERNAME" not in github_repo:
+                    # Build GitHub clone URL with token if needed
+                    if use_github_token:
+                        # Use GH_TOKEN from RunPod secrets
+                        clone_url = github_repo.replace("https://", "https://${GH_TOKEN}@")
+                    else:
+                        clone_url = github_repo
+
+                    # Build startup command (idempotent with comprehensive logging)
+                    docker_startup_cmd = (
+                        "bash -c '"
+                        "exec > >(tee -a /workspace/startup.log) 2>&1 && "
+                        "echo ========================================== && "
+                        "echo AUTO-SETUP STARTING: $(date) && "
+                        "echo ========================================== && "
+                        "echo && "
+                        "cd /workspace && "
+                        "echo [STEP 1/4] Cloning/updating repository... && "
+                        f"if [ -d rag-pipeline ]; then echo Repository exists, pulling updates...; cd rag-pipeline && git pull origin {github_branch}; else echo Cloning fresh repository...; git clone --branch {github_branch} {clone_url} rag-pipeline; fi && "
+                        "echo Repository ready! && "
+                        "echo && "
+                        "cd /workspace/rag-pipeline && "
+                        "echo [STEP 2/4] Checking if initialization needed... && "
+                        "if [ -f /workspace/.init_complete ]; then echo Already initialized, skipping init script; else echo Running initialization script...; bash scripts/init_runpod_services.sh; echo Creating completion marker...; touch /workspace/.init_complete; echo Initialization complete!; fi && "
+                        "echo && "
+                        "echo [STEP 3/4] Verifying services... && "
+                        "service postgresql status || echo PostgreSQL not running && "
+                        "curl -s http://localhost:8000/health || echo vLLM not ready yet && "
+                        "echo && "
+                        "echo [STEP 4/4] Starting container keepalive... && "
+                        "echo ========================================== && "
+                        "echo AUTO-SETUP COMPLETE: $(date) && "
+                        "echo ========================================== && "
+                        "echo Pod is ready for use! && "
+                        "echo Logs: /workspace/startup.log && "
+                        "echo && "
+                        "exec sleep infinity"
+                        "'"
+                    )
+
+                    st.info(f"🚀 Auto-setup enabled! Cloning from: `{github_repo}` (branch: `{github_branch}`)")
+
                 pod = manager.create_pod(
                     name=pod_name,
                     gpu_type=gpu_type,
                     volume_gb=volume_gb,
                     container_disk_gb=container_disk_gb,
-                    env=custom_env
+                    env=custom_env,
+                    docker_args=docker_startup_cmd  # Auto-setup command
                 )
 
                 if not pod:
@@ -1522,55 +1628,125 @@ def page_deployment():
 
                 # Wait for ready
                 start_time = time.time()
-                timeout = 300  # 5 minutes
+                timeout = 120  # 2 minutes (shorter timeout)
+
+                pod_ready = False
 
                 while time.time() - start_time < timeout:
                     status = manager.get_pod_status(pod_id)
+                    elapsed = time.time() - start_time
 
+                    # Check if pod is running
                     if status['status'] == 'running':
+                        pod_ready = True
                         break
 
-                    elapsed = time.time() - start_time
+                    # If status is unknown but SSH is available and we've waited >30s, consider it ready
+                    if status['status'] == 'unknown' and status.get('ssh_host') and elapsed > 30:
+                        pod_ready = True
+                        st.info("ℹ️ Pod status is 'unknown' but SSH is available - pod appears ready!")
+                        break
+
                     progress_pct = min(40 + int((elapsed / timeout) * 50), 90)
                     progress.progress(
                         progress_pct,
-                        text=f"Waiting for pod... Status: {status['status']}"
+                        text=f"Waiting for pod... Status: {status['status']} ({int(elapsed)}s)"
                     )
 
                     time.sleep(5)
 
-                if status['status'] != 'running':
-                    st.warning("⚠️ Pod created but not running yet. Check status manually.")
-                else:
+                # Show result
+                if pod_ready:
                     progress.progress(100, text="✅ Deployment complete!")
 
                     st.success("🎉 Pod deployed successfully!")
 
-                    st.info(f"""
+                    if enable_auto_setup and github_repo and "YOUR_USERNAME" not in github_repo:
+                        # Auto-setup enabled
+                        st.info(f"""
+                        **Pod Details:**
+                        - **ID**: `{pod_id}`
+                        - **Name**: {pod_name}
+                        - **GPU**: {gpu_type}
+                        - **Repository**: {github_repo} (branch: {github_branch})
+                        - **SSH**: `ssh {ssh_host}@ssh.runpod.io`
+
+                        **🚀 Auto-Setup is Running!**
+
+                        The pod is automatically:
+                        1. ✅ Cloning your repository from GitHub
+                        2. ✅ Installing PostgreSQL + pgvector
+                        3. ✅ Setting up Python environment
+                        4. ✅ Starting vLLM server
+
+                        **This takes 10-15 minutes** (runs in background)
+
+                        **Check Progress:**
+                        ```bash
+                        ssh {ssh_host}@ssh.runpod.io
+                        tail -f /workspace/startup.log
+                        ```
+
+                        **When Complete (~15 min), Create SSH Tunnel:**
+                        ```bash
+                        ssh -N -L 8000:localhost:8000 -L 5432:localhost:5432 {ssh_host}@ssh.runpod.io
+                        ```
+
+                        **Then Test:**
+                        - `curl http://localhost:8000/health` (should return: ok)
+                        - Use the "Query" tab to run RAG queries!
+                        """)
+                    else:
+                        # Manual setup
+                        st.info(f"""
+                        **Pod Details:**
+                        - **ID**: `{pod_id}`
+                        - **Name**: {pod_name}
+                        - **GPU**: {gpu_type}
+                        - **SSH**: `ssh {ssh_host}@ssh.runpod.io`
+
+                        **Next Steps:**
+                        1. Use automated setup script (recommended):
+                           ```bash
+                           bash scripts/setup_runpod_pod_direct.sh TCP_HOST TCP_PORT ~/.ssh/runpod_key
+                           ```
+                           Get TCP_HOST and TCP_PORT from RunPod web UI → Your Pod → Connect → "SSH over exposed TCP"
+
+                        2. Or manually SSH and initialize:
+                           ```bash
+                           ssh {ssh_host}@ssh.runpod.io
+                           bash /workspace/rag-pipeline/scripts/init_runpod_services.sh
+                           ```
+
+                        3. Create SSH tunnel:
+                           ```bash
+                           ssh -L 8000:localhost:8000 -L 5432:localhost:5432 {ssh_host}@ssh.runpod.io
+                           ```
+
+                        4. Test and run queries from the "Query" tab!
+                        """)
+
+                    st.balloons()
+                else:
+                    progress.progress(100, text="⚠️ Timeout - check manually")
+
+                    st.warning(f"""
+                    ⚠️ **Pod created but status check timed out**
+
+                    Your pod was created successfully but the API hasn't updated the status yet.
+                    The pod is likely working - you can verify by checking the RunPod web UI.
+
                     **Pod Details:**
                     - **ID**: `{pod_id}`
                     - **Name**: {pod_name}
-                    - **GPU**: {gpu_type}
-                    - **SSH**: `ssh {ssh_host}@ssh.runpod.io`
 
-                    **Next Steps:**
-                    1. SSH into pod and initialize services:
-                       ```bash
-                       ssh {ssh_host}@ssh.runpod.io
-                       bash /workspace/rag-pipeline/scripts/init_runpod_services.sh
-                       ```
+                    **Check Status:**
+                    1. Go to [RunPod Pods](https://www.runpod.io/console/pods)
+                    2. Find pod: {pod_name}
+                    3. If it shows "Running", use the automated setup script
 
-                    2. Create SSH tunnel (new terminal):
-                       ```bash
-                       ssh -L 8000:localhost:8000 -L 5432:localhost:5432 {ssh_host}@ssh.runpod.io
-                       ```
-
-                    3. Test vLLM: `curl http://localhost:8000/health`
-
-                    4. Run queries using the "Query" tab!
+                    **Or refresh this page and check "Existing Pods" section above**
                     """)
-
-                    st.balloons()
 
                     # Refresh pod list
                     time.sleep(2)
@@ -1661,13 +1837,13 @@ def page_deployment():
         total_cost_hr = sum(
             pod.get('costPerHr', 0)
             for pod in pods
-            if pod.get('runtime', {}).get('containerState') == 'running'
+            if (pod.get('runtime') or {}).get('containerState') == 'running'
         )
 
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-            st.metric("Active Pods", len([p for p in pods if p.get('runtime', {}).get('containerState') == 'running']))
+            st.metric("Active Pods", len([p for p in pods if (p.get('runtime') or {}).get('containerState') == 'running']))
         with col2:
             st.metric("Hourly Cost", f"${total_cost_hr:.2f}")
         with col3:
@@ -1680,7 +1856,7 @@ def page_deployment():
 
         cost_data = []
         for pod in pods:
-            runtime = pod.get('runtime', {})
+            runtime = pod.get('runtime') or {}
             state = runtime.get('containerState', 'unknown')
 
             if state == 'running':

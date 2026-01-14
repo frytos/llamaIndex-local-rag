@@ -135,7 +135,7 @@ class RunPodManager:
         name: str = "rag-pipeline-vllm",
         gpu_type: str = "NVIDIA RTX 4090",
         gpu_count: int = 1,
-        image: str = "runpod/pytorch:2.4.0-py3.11-cuda12.4.0-devel",
+        image: str = "runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04",
         volume_gb: int = 100,
         container_disk_gb: int = 50,
         ports: str = "5432/tcp,8000/http,22/tcp,3000/http",
@@ -221,7 +221,7 @@ class RunPodManager:
                 container_disk_in_gb=container_disk_gb,
                 ports=ports,
                 env=default_env,
-                docker_args=docker_args or "bash",
+                docker_args=docker_args,  # Use None to let container use default CMD
                 template_id=template_id
             )
 
@@ -345,9 +345,9 @@ class RunPodManager:
                 "error": f"Pod {pod_id} not found"
             }
 
-        runtime = pod.get("runtime", {})
-        machine = pod.get("machine", {})
-        gpu = pod.get("gpu", {})
+        runtime = pod.get("runtime") or {}
+        machine = pod.get("machine") or {}
+        gpu = pod.get("gpu") or {}
 
         status = {
             # State
@@ -413,11 +413,22 @@ class RunPodManager:
             container_state = status["status"]
             uptime = status["uptime_seconds"]
 
+            # Pod is ready if running with uptime, OR if it has SSH host (even if API hasn't updated)
+            ssh_host = status.get('ssh_host', '')
+
             if container_state == "running" and uptime > 0:
                 log.info(f"✅ Pod {pod_id} is ready!")
                 log.info(f"   Status: {container_state}")
                 log.info(f"   Uptime: {uptime}s")
                 log.info(f"   GPU: {status['gpu_type']} ({status['gpu_utilization']}%)")
+                return True
+
+            # If status is unknown but SSH host exists and we've waited >30s, assume ready
+            if container_state == "unknown" and ssh_host and elapsed > 30:
+                log.info(f"✅ Pod {pod_id} appears ready (SSH available)!")
+                log.info(f"   Status: {container_state} (API may not be updated yet)")
+                log.info(f"   SSH: {ssh_host}")
+                log.info(f"   Try connecting via SSH to verify")
                 return True
 
             elapsed = time.time() - start
@@ -426,6 +437,7 @@ class RunPodManager:
             log.info(
                 f"   Status: {container_state} | "
                 f"Uptime: {uptime}s | "
+                f"SSH: {ssh_host[:20] if ssh_host else 'N/A'} | "
                 f"Remaining: {remaining:.0f}s"
             )
 
@@ -451,12 +463,24 @@ class RunPodManager:
             >>> print(cmd)
             ssh -L 8000:localhost:8000 -L 5432:localhost:5432 pod@ssh.runpod.io
         """
-        status = self.get_pod_status(pod_id)
+        # Try to get pod info directly first (more reliable)
+        pod = self.get_pod(pod_id)
 
-        if status.get("status") == "not_found":
+        if not pod:
             return f"# Pod {pod_id} not found"
 
-        ssh_host = status["ssh_host"]
+        # Extract SSH host from machine info
+        machine = pod.get("machine") or {}
+        ssh_host = machine.get("podHostId", "")
+
+        # If still empty, try from status
+        if not ssh_host:
+            status = self.get_pod_status(pod_id)
+            ssh_host = status.get("ssh_host", "")
+
+        # If still empty, can't generate command
+        if not ssh_host:
+            return f"# SSH host not available yet for pod {pod_id}. Wait a moment and try again."
 
         # Default ports: vLLM (8000), PostgreSQL (5432), Grafana (3000)
         if ports is None:
@@ -465,7 +489,8 @@ class RunPodManager:
         # Build SSH command with port forwarding
         port_forwards = " ".join([f"-L {p}:localhost:{p}" for p in ports])
 
-        ssh_cmd = f"ssh {port_forwards} {ssh_host}@ssh.runpod.io"
+        # Include SSH key hint if user has custom key
+        ssh_cmd = f"ssh -i ~/.ssh/runpod_key {port_forwards} {ssh_host}@ssh.runpod.io"
 
         return ssh_cmd
 
@@ -525,6 +550,105 @@ class RunPodManager:
 
 
 # Convenience functions for common operations
+
+def create_auto_pod(
+    api_key: Optional[str] = None,
+    name: str = "rag-pipeline-auto",
+    github_repo: str = "",
+    github_branch: str = "main",
+    gpu_type: str = "NVIDIA GeForce RTX 4090",
+    volume_gb: int = 100,
+    wait: bool = True
+) -> Optional[Dict]:
+    """
+    Create RunPod pod with automatic GitHub cloning and initialization.
+
+    This creates a pod that:
+    1. Clones your repository from GitHub automatically
+    2. Runs the init script to set up PostgreSQL, vLLM, etc.
+    3. Starts all services in the background
+    4. Is fully ready to use when you SSH in!
+
+    Args:
+        api_key: RunPod API key (or uses RUNPOD_API_KEY env var)
+        name: Pod name
+        github_repo: GitHub repository URL (e.g., https://github.com/user/repo.git)
+        github_branch: Git branch to clone (default: main)
+        gpu_type: GPU type
+        volume_gb: Storage size in GB
+        wait: Wait for pod to be ready
+
+    Returns:
+        Pod details dict or None on error
+
+    Example:
+        >>> pod = create_auto_pod(
+        ...     github_repo="https://github.com/username/llamaIndex-local-rag.git",
+        ...     wait=True
+        ... )
+        >>> print(f"Pod ready! SSH: ssh {pod['machine']['podHostId']}@ssh.runpod.io")
+        >>> # Services are already initialized! Just SSH in and use it.
+    """
+    import os
+
+    api_key = api_key or os.getenv('RUNPOD_API_KEY')
+
+    if not api_key:
+        log.error("API key required (set RUNPOD_API_KEY or pass api_key parameter)")
+        return None
+
+    if not github_repo:
+        log.error("github_repo is required for auto-setup")
+        log.info("Example: create_auto_pod(github_repo='https://github.com/user/repo.git')")
+        return None
+
+    manager = RunPodManager(api_key=api_key)
+
+    # Startup command that clones repo and runs init
+    startup_cmd = f'''bash -c "
+        cd /workspace && \\
+        git clone --branch {github_branch} {github_repo} rag-pipeline && \\
+        cd rag-pipeline && \\
+        bash scripts/init_runpod_services.sh && \\
+        exec sleep infinity
+    "'''
+
+    # Add GitHub info to environment
+    env = {
+        "GITHUB_REPO": github_repo,
+        "GITHUB_BRANCH": github_branch,
+    }
+
+    log.info(f"Creating auto-setup pod from GitHub: {github_repo}")
+
+    pod = manager.create_pod(
+        name=name,
+        gpu_type=gpu_type,
+        volume_gb=volume_gb,
+        env=env,
+        docker_args=startup_cmd
+    )
+
+    if not pod:
+        return None
+
+    pod_id = pod['id']
+
+    if wait:
+        log.info("Waiting for pod to be ready and services to initialize...")
+        log.info("This may take 10-15 minutes (repo clone + service setup)")
+
+        # Wait longer for auto-setup (includes init time)
+        if manager.wait_for_ready(pod_id, timeout=600):  # 10 minutes
+            log.info("✅ Pod is ready!")
+            log.info("")
+            log.info("Services are initializing in background...")
+            log.info("Wait 5 more minutes, then verify:")
+            log.info("  curl http://localhost:8000/health")
+            log.info("  psql -h localhost -U fryt -d vector_db -c 'SELECT 1'")
+
+    return pod
+
 
 def create_rag_pod(
     api_key: str,
