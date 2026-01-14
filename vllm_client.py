@@ -43,8 +43,13 @@ def build_vllm_client(
         response = llm.complete("test query")
     """
     if base_url is None:
-        vllm_port = os.getenv("VLLM_PORT", "8000")
-        base_url = f"http://localhost:{vllm_port}/v1"
+        # Check for VLLM_API_BASE first (supports HTTPS proxy URLs)
+        base_url = os.getenv("VLLM_API_BASE")
+
+        # Fallback to localhost if not set
+        if not base_url:
+            vllm_port = os.getenv("VLLM_PORT", "8000")
+            base_url = f"http://localhost:{vllm_port}/v1"
 
     if model is None:
         model = os.getenv("VLLM_MODEL", "TheBloke/Mistral-7B-Instruct-v0.2-AWQ")
