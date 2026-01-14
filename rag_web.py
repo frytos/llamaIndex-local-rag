@@ -1791,9 +1791,15 @@ def page_deployment():
     if pods and selected_pod_id:
         st.write(f"**Tunnel for**: {pod_names[selected_pod_id]}")
 
-        # Get SSH host
-        status = manager.get_pod_status(selected_pod_id)
-        ssh_host = status['ssh_host']
+        # Get SSH host from cache first (more reliable)
+        cached_host = st.session_state.get('pod_ssh_hosts', {}).get(selected_pod_id)
+
+        if cached_host:
+            ssh_host = cached_host
+        else:
+            # Fallback to API query
+            status = manager.get_pod_status(selected_pod_id)
+            ssh_host = status.get('ssh_host', '')
 
         # Port selection
         port_options = {
@@ -1812,39 +1818,43 @@ def page_deployment():
         ports = [port_options[p] for p in selected_ports]
 
         # Generate SSH command
-        if ports:
+        if ports and ssh_host:
             port_forwards = " ".join([f"-L {p}:localhost:{p}" for p in ports])
-            ssh_cmd = f"ssh -N {port_forwards} {ssh_host}@ssh.runpod.io"
+            ssh_cmd = f"ssh -i ~/.ssh/runpod_key -N {port_forwards} {ssh_host}@ssh.runpod.io"
+        elif not ssh_host:
+            ssh_cmd = "# ERROR: SSH host not available. Click 'Refresh' button above and try again."
+        else:
+            ssh_cmd = "# Select at least one port to forward"
 
-            st.write("**SSH Tunnel Command:**")
-            st.code(ssh_cmd, language="bash")
+        st.write("**SSH Tunnel Command:**")
+        st.code(ssh_cmd, language="bash")
 
-            st.info("""
-            💡 **How to use**:
-            1. Copy command above
-            2. Run in new terminal
-            3. Keep running while using services
-            4. Access services at `localhost:PORT`
-            """)
+        st.info("""
+        💡 **How to use**:
+        1. Copy command above
+        2. Run in new terminal
+        3. Keep running while using services
+        4. Access services at `localhost:PORT`
+        """)
 
-            # Quick test buttons
-            if 8000 in ports:
-                if st.button("Test vLLM (requires tunnel)", key="test_vllm"):
-                    vllm_status = check_vllm_health()
-                    if vllm_status['status'] == 'healthy':
-                        st.success(f"✅ vLLM is healthy! Latency: {vllm_status['latency_ms']}ms")
-                    else:
-                        st.error(f"❌ vLLM: {vllm_status.get('error', 'Unreachable')}")
+        # Quick test buttons
+        if 8000 in ports:
+            if st.button("Test vLLM (requires tunnel)", key="test_vllm"):
+                vllm_status = check_vllm_health()
+                if vllm_status['status'] == 'healthy':
+                    st.success(f"✅ vLLM is healthy! Latency: {vllm_status['latency_ms']}ms")
+                else:
+                    st.error(f"❌ vLLM: {vllm_status.get('error', 'Unreachable')}")
 
-            if 5432 in ports:
-                if st.button("Test PostgreSQL (requires tunnel)", key="test_pg"):
-                    pg_status = check_postgres_health()
-                    if pg_status['status'] == 'healthy':
-                        st.success("✅ PostgreSQL is healthy!")
-                        if pg_status.get('pgvector'):
-                            st.success("✅ pgvector extension installed")
-                    else:
-                        st.error(f"❌ PostgreSQL: {pg_status.get('error', 'Unreachable')}")
+        if 5432 in ports:
+            if st.button("Test PostgreSQL (requires tunnel)", key="test_pg"):
+                pg_status = check_postgres_health()
+                if pg_status['status'] == 'healthy':
+                    st.success("✅ PostgreSQL is healthy!")
+                    if pg_status.get('pgvector'):
+                        st.success("✅ pgvector extension installed")
+                else:
+                    st.error(f"❌ PostgreSQL: {pg_status.get('error', 'Unreachable')}")
 
     else:
         st.info("Create a pod first to manage SSH tunnels")
