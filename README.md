@@ -171,6 +171,50 @@ python rag_low_level_m1_16gb_verbose.py --interactive
 python rag_low_level_m1_16gb_verbose.py --query "What are the key findings?"
 ```
 
+### Facebook Messenger / Chat Data Quick Start
+
+For indexing Facebook Messenger exports or other conversational data (multilingual chat logs):
+
+```bash
+# 1. Configure for multilingual chat data
+export EMBED_MODEL=BAAI/bge-m3          # Multilingual model (supports FR/EN/ES/etc)
+export EMBED_DIM=1024                    # Match bge-m3 dimensions
+export EMBED_BACKEND=mlx                 # 9x faster on Apple Silicon (M1/M2/M3)
+export CHUNK_SIZE=300                    # Optimized for short messages
+export CHUNK_OVERLAP=50                  # Preserve conversation flow
+export TOP_K=6                           # More context for chat queries
+
+# 2. Metadata extraction (enabled by default)
+export EXTRACT_CHAT_METADATA=1           # Parse Messenger metadata (participants, dates)
+export EXTRACT_ENHANCED_METADATA=1       # Rich metadata extraction
+export EXTRACT_ENTITIES=1                # Detect names, places
+
+# 3. Index your Messenger data
+export PDF_PATH=data/01-messenger        # Path to Messenger export folder
+export PGTABLE=messenger_chat            # Table name
+export RESET_TABLE=1                     # Fresh index
+
+python rag_low_level_m1_16gb_verbose.py
+
+# 4. Query in multiple languages
+python rag_low_level_m1_16gb_verbose.py --query-only --query "What did Quentin say about Léo?"
+python rag_low_level_m1_16gb_verbose.py --query-only --query "Qu'est-ce que Alice a dit en mars 2022?"
+```
+
+**Features**:
+- ✅ Multilingual embeddings (French, English, Spanish, etc.)
+- ✅ MLX backend on Apple Silicon: 9x faster loading, 3.7x faster embedding (93 texts/sec)
+- ✅ Automatic HTML cleaning (removes Messenger formatting)
+- ✅ Conversation context preserved (3-5 messages per chunk)
+- ✅ Metadata filtering by participant, date, or thread
+- ✅ Query in any language
+
+**Streamlit UI**: Use the "Chat 💬" preset in the web interface for one-click configuration:
+```bash
+streamlit run rag_web.py
+# Select "Chat messages (300/50)" and "bge-m3 (Multilingual)"
+```
+
 ### Performance Optimization: vLLM Server Mode (3-4x Faster)
 
 For significantly faster queries (2-3s instead of 8-15s), use vLLM server mode:

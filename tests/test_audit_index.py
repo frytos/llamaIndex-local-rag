@@ -15,8 +15,10 @@ from unittest.mock import Mock, patch, MagicMock
 import sys
 from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add project root and scripts to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / 'scripts'))
 
 import audit_index
 

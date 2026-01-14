@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "grafana": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--network", "llamaindex-local-rag_rag_network",
+        "-e", "GRAFANA_URL",
+        "-e", "GRAFANA_SERVICE_ACCOUNT_TOKEN",
+        "mcp/grafana",
+        "-t", "stdio"
+      ],
+      "env": {
+        "GRAFANA_URL": "http://rag_grafana:3000",
+        "GRAFANA_SERVICE_ACCOUNT_TOKEN": "${GRAFANA_SERVICE_ACCOUNT_TOKEN}"
+      }
+    }
+  }
+}

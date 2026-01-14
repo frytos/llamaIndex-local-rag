@@ -1,0 +1,368 @@
+{
+  "id": null,
+  "uid": "macos-system",
+  "title": "M1 Mac System Metrics",
+  "tags": ["macos", "system", "host"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "CPU Usage",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "macos_cpu_percent",
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 70, "color": "yellow"},
+              {"value": 90, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Memory Usage",
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "macos_memory_percent",
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 70, "color": "yellow"},
+              {"value": 85, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Swap Usage",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "macos_swap_percent",
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 50, "color": "yellow"},
+              {"value": 80, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Load Average (15m)",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "macos_load_avg_15m",
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 6, "color": "yellow"},
+              {"value": 8, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "CPU Usage Over Time",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "macos_cpu_percent",
+          "refId": "A",
+          "legendFormat": "CPU %",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20,
+            "lineWidth": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Memory & Swap Usage",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "macos_memory_percent",
+          "refId": "A",
+          "legendFormat": "Memory %",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        },
+        {
+          "expr": "macos_swap_percent",
+          "refId": "B",
+          "legendFormat": "Swap %",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Load Average",
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "macos_load_avg_1m",
+          "refId": "A",
+          "legendFormat": "1 minute",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        },
+        {
+          "expr": "macos_load_avg_5m",
+          "refId": "B",
+          "legendFormat": "5 minutes",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        },
+        {
+          "expr": "macos_load_avg_15m",
+          "refId": "C",
+          "legendFormat": "15 minutes",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Memory Breakdown",
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "macos_memory_available_bytes / 1024 / 1024 / 1024",
+          "refId": "A",
+          "legendFormat": "Available GB",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        },
+        {
+          "expr": "macos_memory_used_bytes / 1024 / 1024 / 1024",
+          "refId": "B",
+          "legendFormat": "Used GB",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        },
+        {
+          "expr": "macos_memory_wired_bytes / 1024 / 1024 / 1024",
+          "refId": "C",
+          "legendFormat": "Wired GB",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decgbytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "stacking": {"mode": "normal"}
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Available Memory",
+      "gridPos": {"x": 0, "y": 20, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "macos_memory_available_bytes / 1024 / 1024 / 1024",
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decgbytes",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 2, "color": "yellow"},
+              {"value": 4, "color": "green"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Total Memory",
+      "gridPos": {"x": 6, "y": 20, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "macos_memory_total_bytes / 1024 / 1024 / 1024",
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decgbytes",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "CPU Cores",
+      "gridPos": {"x": 12, "y": 20, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "macos_cpu_count_logical",
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Total Processes",
+      "gridPos": {"x": 18, "y": 20, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "macos_process_count",
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Disk Usage",
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 6},
+      "targets": [
+        {
+          "expr": "macos_disk_usage_percent{path=\"/\"}",
+          "refId": "A",
+          "legendFormat": "Root Disk %",
+          "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20,
+            "lineWidth": 2
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 80, "color": "yellow"},
+              {"value": 90, "color": "red"}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

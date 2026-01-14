@@ -1,0 +1,279 @@
+# HELP rag_query_total Total number of queries
+# TYPE rag_query_total counter
+rag_query_total 1.0
+
+# HELP rag_query_success_total Total successful queries
+# TYPE rag_query_success_total counter
+rag_query_success_total 1.0
+
+# HELP rag_query_errors_total Total failed queries
+# TYPE rag_query_errors_total counter
+rag_query_errors_total 0
+
+# HELP rag_query_duration_seconds_sum Total query duration
+# TYPE rag_query_duration_seconds_sum counter
+rag_query_duration_seconds_sum 45.826897859573364
+
+# HELP rag_query_duration_seconds_count Total query count
+# TYPE rag_query_duration_seconds_count counter
+rag_query_duration_seconds_count 1.0
+
+# HELP rag_pipeline_stage_duration_seconds_sum Pipeline stage duration
+# TYPE rag_pipeline_stage_duration_seconds_sum counter
+rag_pipeline_stage_duration_seconds_sum{stage="generation"} 0
+
+# HELP rag_pipeline_stage_duration_seconds_count Pipeline stage count
+# TYPE rag_pipeline_stage_duration_seconds_count counter
+rag_pipeline_stage_duration_seconds_count{stage="generation"} 0
+
+# HELP rag_pipeline_stage_errors_total Pipeline stage errors
+# TYPE rag_pipeline_stage_errors_total counter
+rag_pipeline_stage_errors_total{stage="generation"} 0
+
+# HELP rag_retrieval_total Total retrievals
+# TYPE rag_retrieval_total counter
+rag_retrieval_total 1.0
+
+# HELP rag_retrieval_score_sum Sum of retrieval scores
+# TYPE rag_retrieval_score_sum counter
+rag_retrieval_score_sum 2.5764095508050073
+
+# HELP rag_retrieval_score_count Count of retrieval scores
+# TYPE rag_retrieval_score_count counter
+rag_retrieval_score_count 4
+
+# HELP rag_retrieval_score_avg Average retrieval score
+# TYPE rag_retrieval_score_avg gauge
+rag_retrieval_score_avg 0.6441023877012518
+
+# HELP rag_retrieval_score_p50 Retrieval score p50
+# TYPE rag_retrieval_score_p50 gauge
+rag_retrieval_score_p50 0
+
+# HELP rag_retrieval_score_p95 Retrieval score p95
+# TYPE rag_retrieval_score_p95 gauge
+rag_retrieval_score_p95 0
+
+# HELP rag_retrieval_score_p99 Retrieval score p99
+# TYPE rag_retrieval_score_p99 gauge
+rag_retrieval_score_p99 0
+
+# HELP rag_retrieval_top_score Top retrieval score
+# TYPE rag_retrieval_top_score gauge
+rag_retrieval_top_score 0.6598388945960352
+
+# HELP rag_retrieval_score_variance Retrieval score variance
+# TYPE rag_retrieval_score_variance gauge
+rag_retrieval_score_variance 9.943238648745468e-05
+
+# HELP rag_retrieval_documents_total Total documents retrieved
+# TYPE rag_retrieval_documents_total counter
+rag_retrieval_documents_total 4
+
+# HELP rag_retrieval_documents_relevant_total Relevant documents (user feedback)
+# TYPE rag_retrieval_documents_relevant_total counter
+rag_retrieval_documents_relevant_total 0
+
+# HELP rag_embedding_duration_seconds_sum Total embedding time
+# TYPE rag_embedding_duration_seconds_sum counter
+rag_embedding_duration_seconds_sum 0
+
+# HELP rag_embedding_duration_seconds_count Embedding count
+# TYPE rag_embedding_duration_seconds_count counter
+rag_embedding_duration_seconds_count 0
+
+# HELP rag_embedding_errors_total Embedding errors
+# TYPE rag_embedding_errors_total counter
+rag_embedding_errors_total 0
+
+# HELP rag_embedding_batch_size Current embedding batch size
+# TYPE rag_embedding_batch_size gauge
+rag_embedding_batch_size 0
+
+# HELP rag_embedding_batch_utilization_percent Embedding batch utilization
+# TYPE rag_embedding_batch_utilization_percent gauge
+rag_embedding_batch_utilization_percent 0
+
+# HELP rag_embeddings_per_second Embedding throughput
+# TYPE rag_embeddings_per_second gauge
+rag_embeddings_per_second 0
+
+# HELP rag_llm_tokens_generated_total Total tokens generated
+# TYPE rag_llm_tokens_generated_total counter
+rag_llm_tokens_generated_total 0
+
+# HELP rag_llm_tokens_per_second LLM token generation speed
+# TYPE rag_llm_tokens_per_second gauge
+rag_llm_tokens_per_second 0
+
+# HELP rag_llm_context_tokens_used Context tokens used
+# TYPE rag_llm_context_tokens_used gauge
+rag_llm_context_tokens_used 0
+
+# HELP rag_llm_context_tokens_available Context tokens available
+# TYPE rag_llm_context_tokens_available gauge
+rag_llm_context_tokens_available 0
+
+# HELP rag_llm_context_utilization_percent Context utilization
+# TYPE rag_llm_context_utilization_percent gauge
+rag_llm_context_utilization_percent 0
+
+# HELP rag_llm_generation_duration_seconds_sum Total LLM generation time
+# TYPE rag_llm_generation_duration_seconds_sum counter
+rag_llm_generation_duration_seconds_sum 0
+
+# HELP rag_llm_generation_duration_seconds_count LLM generation count
+# TYPE rag_llm_generation_duration_seconds_count counter
+rag_llm_generation_duration_seconds_count 0
+
+# HELP rag_cache_requests_total Total cache requests
+# TYPE rag_cache_requests_total counter
+rag_cache_requests_total 0
+
+# HELP rag_cache_hits_total Cache hits
+# TYPE rag_cache_hits_total counter
+rag_cache_hits_total 0
+
+# HELP rag_cache_misses_total Cache misses
+# TYPE rag_cache_misses_total counter
+rag_cache_misses_total 0
+
+# HELP rag_cache_hit_rate Cache hit rate
+# TYPE rag_cache_hit_rate gauge
+rag_cache_hit_rate 0
+
+# HELP rag_cache_size_entries Cache size in entries
+# TYPE rag_cache_size_entries gauge
+rag_cache_size_entries 0
+
+# HELP rag_cache_size_bytes Cache size in bytes
+# TYPE rag_cache_size_bytes gauge
+rag_cache_size_bytes 0
+
+# HELP rag_cache_evictions_total Cache evictions
+# TYPE rag_cache_evictions_total counter
+rag_cache_evictions_total 0
+
+# HELP rag_cache_semantic_similarity_threshold Semantic cache threshold
+# TYPE rag_cache_semantic_similarity_threshold gauge
+rag_cache_semantic_similarity_threshold 0
+
+# HELP rag_documents_indexed_total Total documents indexed
+# TYPE rag_documents_indexed_total counter
+rag_documents_indexed_total 0
+
+# HELP rag_chunks_created_total Total chunks created
+# TYPE rag_chunks_created_total counter
+rag_chunks_created_total 0
+
+# HELP rag_index_duration_seconds Last indexing duration
+# TYPE rag_index_duration_seconds gauge
+rag_index_duration_seconds 0
+
+# HELP rag_chunking_duration_seconds Last chunking duration
+# TYPE rag_chunking_duration_seconds gauge
+rag_chunking_duration_seconds 0
+
+# HELP rag_chunks_per_document Average chunks per document
+# TYPE rag_chunks_per_document gauge
+rag_chunks_per_document 0
+
+# HELP rag_chunk_size_bytes_p50 Chunk size p50
+# TYPE rag_chunk_size_bytes_p50 gauge
+rag_chunk_size_bytes_p50 0
+
+# HELP rag_chunk_size_bytes_p95 Chunk size p95
+# TYPE rag_chunk_size_bytes_p95 gauge
+rag_chunk_size_bytes_p95 0
+
+# HELP rag_chunk_size_bytes_p99 Chunk size p99
+# TYPE rag_chunk_size_bytes_p99 gauge
+rag_chunk_size_bytes_p99 0
+
+# HELP rag_chunk_overlap_bytes Chunk overlap size
+# TYPE rag_chunk_overlap_bytes gauge
+rag_chunk_overlap_bytes 0
+
+# HELP rag_db_rows_total Total rows in vector store
+# TYPE rag_db_rows_total gauge
+rag_db_rows_total 0
+
+# HELP rag_db_operations_total Total database operations
+# TYPE rag_db_operations_total counter
+rag_db_operations_total 0
+
+# HELP rag_db_errors_total Database errors
+# TYPE rag_db_errors_total counter
+rag_db_errors_total 0
+
+# HELP rag_queries_per_second Query throughput
+# TYPE rag_queries_per_second gauge
+rag_queries_per_second 0
+
+# HELP rag_documents_indexed_per_second Indexing throughput
+# TYPE rag_documents_indexed_per_second gauge
+rag_documents_indexed_per_second 0
+
+# HELP rag_process_cpu_percent Process CPU usage
+# TYPE rag_process_cpu_percent gauge
+rag_process_cpu_percent 0
+
+# HELP rag_process_memory_rss_bytes Process memory RSS
+# TYPE rag_process_memory_rss_bytes gauge
+rag_process_memory_rss_bytes 0
+
+# HELP rag_process_memory_vms_bytes Process memory VMS
+# TYPE rag_process_memory_vms_bytes gauge
+rag_process_memory_vms_bytes 0
+
+# HELP rag_process_threads_active Active threads
+# TYPE rag_process_threads_active gauge
+rag_process_threads_active 0
+
+# HELP rag_memory_embedding_model_bytes Embedding model memory
+# TYPE rag_memory_embedding_model_bytes gauge
+rag_memory_embedding_model_bytes 0
+
+# HELP rag_memory_llm_model_bytes LLM model memory
+# TYPE rag_memory_llm_model_bytes gauge
+rag_memory_llm_model_bytes 0
+
+# HELP rag_memory_cache_bytes Cache memory
+# TYPE rag_memory_cache_bytes gauge
+rag_memory_cache_bytes 0
+
+# HELP rag_memory_python_heap_bytes Python heap memory
+# TYPE rag_memory_python_heap_bytes gauge
+rag_memory_python_heap_bytes 0
+
+# HELP rag_process_gc_collections_total GC collections
+# TYPE rag_process_gc_collections_total counter
+rag_process_gc_collections_total{generation="2"} 0
+
+# HELP rag_process_gc_duration_seconds Last GC duration
+# TYPE rag_process_gc_duration_seconds gauge
+rag_process_gc_duration_seconds 0
+
+# HELP rag_answer_satisfaction_score User satisfaction score
+# TYPE rag_answer_satisfaction_score gauge
+rag_answer_satisfaction_score 0
+
+# HELP rag_answer_length_chars Answer length in characters
+# TYPE rag_answer_length_chars gauge
+rag_answer_length_chars 0
+
+# HELP rag_answer_sources_cited Sources cited in answer
+# TYPE rag_answer_sources_cited gauge
+rag_answer_sources_cited 0
+
+# HELP rag_query_length_chars Query length in characters
+# TYPE rag_query_length_chars gauge
+rag_query_length_chars 0
+
+# HELP rag_query_tokens Query length in tokens
+# TYPE rag_query_tokens gauge
+rag_query_tokens 0
+
+# HELP rag_info RAG system info
+# TYPE rag_info gauge
+rag_info 1

@@ -64,16 +64,18 @@ scrape_configs:
         action: keep
 
   # RAG Application metrics (file-based push gateway pattern)
-  - job_name: 'rag-app'
-    static_configs:
-      - targets: ['localhost:9091']  # If using pushgateway
-        labels:
-          service: 'rag-application'
-    # For file-based metrics collection
-    file_sd_configs:
-      - files:
-          - '/prometheus/metrics/*.prom'
-        refresh_interval: 30s
+  # Note: Disabled until pushgateway or metrics endpoint is available
+  # - job_name: 'rag-app'
+  #   static_configs:
+  #     - targets: ['localhost:9091']  # If using pushgateway
+  #       labels:
+  #         service: 'rag-application'
+  #   # For file-based metrics collection
+  #   # Note: file_sd_configs requires JSON target files, not .prom metric files
+  #   # file_sd_configs:
+  #   #   - files:
+  #   #       - '/prometheus/sd/*.json'
+  #   #     refresh_interval: 30s
 
   # Alertmanager metrics
   - job_name: 'alertmanager'
@@ -84,11 +86,33 @@ scrape_configs:
 
   # Grafana metrics
   - job_name: 'grafana'
+    metrics_path: '/metrics'
     static_configs:
       - targets: ['grafana:3000']
         labels:
           service: 'grafana'
-        metrics_path: '/metrics'
+
+  # macOS Host Metrics (native exporter for real M1 Mac metrics)
+  - job_name: 'macos-host'
+    static_configs:
+      - targets: ['host.docker.internal:9101']
+        labels:
+          service: 'macos-host'
+          instance: 'm1-mac-mini'
+          environment: 'local'
+
+  # RAG Application Metrics (file-based metrics export)
+  - job_name: 'rag-app'
+    static_configs:
+      - targets: ['host.docker.internal:9102']  # Placeholder - will use file_sd later
+        labels:
+          service: 'rag-application'
+          environment: 'local'
+    # File-based service discovery for RAG metrics (will be configured later)
+    # file_sd_configs:
+    #   - files:
+    #       - '/prometheus/rag_metrics/*.json'
+    #     refresh_interval: 30s
 
 # Remote write (optional - for long-term storage)
 # remote_write:

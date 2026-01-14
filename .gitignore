@@ -153,6 +153,22 @@ performance_report.json
 *_ANALYSIS*.md
 *_REPORT*.md
 *_SUMMARY*.md
+*_AUDIT*.md
+*_COMPLETE*.md
+PHASE*.md
+SESSION*.md
+COMMIT*.md
+audit_report_*.txt
+hnsw_migration_report_*.txt
+*_FINDINGS.txt
+*_BOTTLENECK_ANALYSIS.txt
+
+# Chat exports (should be in archive/chat-exports/)
+/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.txt
+
+# Backup files
+*.backup
+*.bak
 
 # Pre-commit
 .pre-commit-config.yaml.backup

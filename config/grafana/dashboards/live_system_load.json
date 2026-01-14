@@ -1,0 +1,368 @@
+{
+  "id": null,
+  "uid": "live-system-load",
+  "title": "Live System Load",
+  "tags": ["system", "realtime"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": {"from": "now-5m", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "CPU Usage % (All Cores)",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "(1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[30s]))) * 100",
+          "refId": "A",
+          "legendFormat": "CPU Usage %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 60, "color": "yellow"},
+              {"value": 80, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "single"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Memory Usage (GB)",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024 / 1024",
+          "refId": "A",
+          "legendFormat": "Used Memory"
+        },
+        {
+          "expr": "node_memory_MemAvailable_bytes / 1024 / 1024 / 1024",
+          "refId": "B",
+          "legendFormat": "Available Memory"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decgbytes",
+          "min": 0,
+          "max": 16,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Used Memory"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Available Memory"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]
+          }
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 3,
+      "type": "gauge",
+      "title": "Current CPU %",
+      "gridPos": {"x": 0, "y": 8, "w": 6, "h": 6},
+      "targets": [
+        {
+          "expr": "(1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[30s]))) * 100",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 60, "color": "yellow"},
+              {"value": 80, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 4,
+      "type": "gauge",
+      "title": "Memory Used %",
+      "gridPos": {"x": 6, "y": 8, "w": 6, "h": 6},
+      "targets": [
+        {
+          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 70, "color": "yellow"},
+              {"value": 90, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "PostgreSQL Status",
+      "gridPos": {"x": 12, "y": 8, "w": 4, "h": 3},
+      "targets": [
+        {
+          "expr": "pg_up",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "value": "1", "text": "UP"},
+            {"type": "value", "value": "0", "text": "DOWN"}
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 1, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "DB Connections",
+      "gridPos": {"x": 16, "y": 8, "w": 4, "h": 3},
+      "targets": [
+        {
+          "expr": "pg_stat_database_numbackends{datname=\"vector_db\"}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 10, "color": "yellow"},
+              {"value": 20, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "DB Size",
+      "gridPos": {"x": 20, "y": 8, "w": 4, "h": 3},
+      "targets": [
+        {
+          "expr": "pg_database_size_bytes{datname=\"vector_db\"} / 1024 / 1024",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Available RAM",
+      "gridPos": {"x": 12, "y": 11, "w": 4, "h": 3},
+      "targets": [
+        {
+          "expr": "node_memory_MemAvailable_bytes / 1024 / 1024 / 1024",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decgbytes",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 2, "color": "yellow"},
+              {"value": 4, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background"
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Total Container Memory (All RAG Services)",
+      "gridPos": {"x": 0, "y": 14, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(container_memory_working_set_bytes{id=~\"/docker.*\"}) / 1024 / 1024",
+          "refId": "A",
+          "legendFormat": "Total Container Memory (MB)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "showPoints": "never"
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Total Container CPU (All RAG Services)",
+      "gridPos": {"x": 12, "y": 14, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{id=~\"/docker.*\"}[1m])) * 100",
+          "refId": "A",
+          "legendFormat": "Total Container CPU %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "showPoints": "never"
+          }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Load Average (1m, 5m, 15m)",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 8},
+      "targets": [
+        {
+          "expr": "node_load1",
+          "refId": "A",
+          "legendFormat": "1 minute"
+        },
+        {
+          "expr": "node_load5",
+          "refId": "B",
+          "legendFormat": "5 minutes"
+        },
+        {
+          "expr": "node_load15",
+          "refId": "C",
+          "legendFormat": "15 minutes"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    }
+  ],
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m"]
+  }
+}

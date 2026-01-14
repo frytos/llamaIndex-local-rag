@@ -255,44 +255,99 @@ def compute_file_hash(file_path: str) -> str:
     return sha256.hexdigest()
 
 
-def extract_chat_metadata(text: str) -> dict:
+def extract_chat_metadata(text: str, file_path: str = "") -> dict:
     """
     Extract metadata from chat log messages.
-    Detects patterns like: [2022-10-13 13:22] Name: message
+    Supports multiple formats with enhanced Facebook Messenger detection.
 
     Returns dict with:
-        - participants: List of unique participant names
+        - participants: List of unique participant names (in this chunk)
         - dates: List of dates mentioned
         - date_range: Tuple of (earliest, latest) dates
         - message_count: Number of messages in chunk
+        - platform: Detected platform (facebook_messenger, generic)
+
+    Facebook Messenger specific (if header detected):
+        - group_name: Name of the group chat
+        - group_id: Facebook group ID (from filename)
+        - conversation_participants: All participants in conversation (from header)
+        - total_conversation_messages: Total messages in conversation (from header)
+        - conversation_type: "group_chat" or "direct_message"
+        - attachment_count: Number of attachments in chunk
+        - has_reactions: Whether chunk contains reactions
+        - group_events: List of group changes (member additions, name changes)
     """
     import re
-    from datetime import datetime
+    from collections import Counter
+
+    metadata = {}
+
+    # Check for Facebook Messenger header format
+    # Format: "Conversation: Name1 & Name2 & Name3\nMessages: 8176\n======"
+    header_pattern = r'Conversation:\s*(.+?)\s*\nMessages:\s*(\d+)'
+    header_match = re.search(header_pattern, text)
+
+    if header_match:
+        # Facebook Messenger format detected
+        metadata["platform"] = "facebook_messenger"
+
+        # Extract conversation participants from header
+        conversation_line = header_match.group(1)
+        all_participants = [p.strip() for p in conversation_line.split('&')]
+        metadata["conversation_participants"] = all_participants
+        metadata["conversation_participant_count"] = len(all_participants)
+
+        # Extract total message count
+        total_messages = int(header_match.group(2))
+        metadata["total_conversation_messages"] = total_messages
+
+        # Determine conversation type
+        metadata["conversation_type"] = "group_chat" if len(all_participants) > 2 else "direct_message"
+
+        # Extract group ID from filename if available
+        # Format: groupname_1234567890.txt
+        if file_path:
+            filename = file_path.split('/')[-1]
+            group_id_match = re.search(r'_(\d{10,})(?:\.txt)?$', filename)
+            if group_id_match:
+                metadata["group_id"] = group_id_match.group(1)
+
+            # Extract group name from filename (before the ID)
+            group_name_match = re.search(r'/([^/_]+)_\d+(?:\.txt)?$', file_path)
+            if group_name_match:
+                metadata["group_name"] = group_name_match.group(1)
 
     # Pattern: [YYYY-MM-DD HH:MM] Name: message
     pattern = r'\[(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\]\s+([^:]+):'
     matches = re.findall(pattern, text)
 
     if not matches:
-        return {}
+        # No messages found - might be header-only chunk
+        if metadata:
+            metadata["is_chat_log"] = True
+            metadata["message_count"] = 0
+        return metadata
 
+    # Extract participants and dates from messages in this chunk
     participants = []
     dates = []
+    timestamps = []
 
     for date_str, time_str, participant in matches:
         participants.append(participant.strip())
         dates.append(date_str)
+        timestamps.append(f"{date_str} {time_str}")
 
     # Get unique values
     unique_participants = list(set(participants))
     unique_dates = sorted(set(dates))
 
-    metadata = {
+    metadata.update({
         "participants": unique_participants,
         "participant_count": len(unique_participants),
         "message_count": len(matches),
         "is_chat_log": True,
-    }
+    })
 
     # Add date range if dates found
     if unique_dates:
@@ -301,13 +356,75 @@ def extract_chat_metadata(text: str) -> dict:
         metadata["latest_date"] = unique_dates[-1]
         metadata["date_range"] = f"{unique_dates[0]} to {unique_dates[-1]}"
 
+        # Calculate time span in days
+        from datetime import datetime
+        try:
+            start = datetime.strptime(unique_dates[0], "%Y-%m-%d")
+            end = datetime.strptime(unique_dates[-1], "%Y-%m-%d")
+            metadata["time_span_days"] = (end - start).days + 1
+        except:
+            pass
+
     # Add dominant participant (most messages in chunk)
     if participants:
-        from collections import Counter
         participant_counts = Counter(participants)
         dominant = participant_counts.most_common(1)[0]
         metadata["dominant_participant"] = dominant[0]
         metadata["dominant_participant_count"] = dominant[1]
+
+    # Facebook Messenger specific features
+    if metadata.get("platform") == "facebook_messenger":
+        # Count attachments
+        # Patterns: "Name a envoyé une pièce jointe" (French) or "Name sent an attachment" (English)
+        attachment_patterns = [
+            r'a envoyé une pièce jointe',
+            r'sent an attachment',
+            r'Vous avez envoyé une pièce jointe',
+            r'You sent an attachment'
+        ]
+        attachment_count = sum(len(re.findall(pattern, text, re.IGNORECASE)) for pattern in attachment_patterns)
+        if attachment_count > 0:
+            metadata["attachment_count"] = attachment_count
+            metadata["has_attachments"] = True
+
+        # Detect reactions
+        reaction_pattern = r'reacted\s+[\U0001F300-\U0001F9FF]|a réagi'
+        if re.search(reaction_pattern, text):
+            metadata["has_reactions"] = True
+            reaction_matches = re.findall(reaction_pattern, text)
+            metadata["reaction_count"] = len(reaction_matches)
+
+        # Extract group events
+        group_events = []
+        event_patterns = [
+            (r'added (.+?) to the group', 'member_added'),
+            (r'a ajouté (.+?) au groupe', 'member_added'),
+            (r'named the group (.+?)\.', 'group_renamed'),
+            (r'a nommé le groupe (.+?)\.', 'group_renamed'),
+            (r'left the group', 'member_left'),
+            (r'a quitté le groupe', 'member_left'),
+            (r'removed (.+?) from the group', 'member_removed'),
+            (r'changed the group photo', 'photo_changed'),
+        ]
+
+        for pattern, event_type in event_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    match = match[0] if match else ''
+                group_events.append({
+                    "type": event_type,
+                    "detail": match if match else event_type
+                })
+
+        if group_events:
+            metadata["group_events"] = group_events
+            metadata["group_event_count"] = len(group_events)
+            metadata["has_group_events"] = True
+
+    # If no platform detected yet but has messages, mark as generic
+    if "platform" not in metadata and matches:
+        metadata["platform"] = "generic"
 
     return metadata
 
@@ -357,6 +474,106 @@ def clean_html_content(html: str) -> str:
     text = '\n'.join(lines)
 
     return text
+
+
+def extract_messenger_participants_from_html(html: str, file_path: str = "") -> dict:
+    """
+    Extract participants from Facebook Messenger HTML BEFORE cleaning.
+
+    Facebook Messenger HTML structure:
+    - <title>Person Name</title> - The conversation partner
+    - <h1>Person Name</h1> - Same as title
+    - <aside>Générée par Author Name le ...</aside> - Export creator
+    - <h2 class="_a6-h">Person Name</h2> - Message senders (repeated)
+
+    Returns:
+        dict with:
+        - participants: List of unique participant names
+        - conversation_partner: Main person from title
+        - export_author: Person who exported the data
+    """
+    import re
+    from bs4 import BeautifulSoup
+
+    metadata = {}
+    participants = set()
+
+    try:
+        soup = BeautifulSoup(html, 'html.parser')
+
+        # Extract conversation partner from <title>
+        title = soup.find('title')
+        if title and title.string:
+            conversation_partner = title.string.strip()
+            metadata['conversation_partner'] = conversation_partner
+            participants.add(conversation_partner)
+
+        # Extract export author from <aside> - "Générée par Name le ..."
+        aside = soup.find('aside')
+        if aside and aside.string:
+            # Pattern: "Générée par Arnaud Grd le ..."
+            author_match = re.search(r'Générée par (.+?) le', aside.get_text())
+            if author_match:
+                export_author = author_match.group(1).strip()
+                metadata['export_author'] = export_author
+                participants.add(export_author)
+
+        # Extract all message senders from <h2> tags with class _a6-h
+        h2_tags = soup.find_all('h2', class_='_a6-h')
+        for h2 in h2_tags:
+            sender = h2.get_text().strip()
+            if sender and sender != 'Participants':  # Exclude header text
+                participants.add(sender)
+
+        # If no h2 tags, try all h2 tags
+        if not h2_tags:
+            for h2 in soup.find_all('h2'):
+                sender = h2.get_text().strip()
+                if sender and sender != 'Participants':
+                    participants.add(sender)
+
+        # Clean up participant names - filter out noise
+        cleaned_participants = []
+        noise_patterns = [
+            'Participants', 'Facebook User', 'Utilisateur Facebook',
+            'Lien d\'invitation', 'Quiet', 'Vous ne faites plus partie',
+            '<3', '❤', '😍', '👍'  # Emoji/symbols in group names
+        ]
+
+        for p in participants:
+            if not p:
+                continue
+
+            # Skip if contains noise patterns
+            is_noise = False
+            for pattern in noise_patterns:
+                if pattern.lower() in p.lower() or pattern in p:
+                    is_noise = True
+                    break
+
+            # Skip if contains colons (likely system messages like "Lien : ...")
+            if ':' in p or len(p) < 3 or len(p) > 50:
+                is_noise = True
+
+            if not is_noise:
+                cleaned_participants.append(p)
+
+        metadata['participants'] = sorted(list(set(cleaned_participants)))
+        metadata['participant_count'] = len(metadata['participants'])
+
+        # Determine conversation type
+        if len(metadata['participants']) > 2:
+            metadata['conversation_type'] = 'group_chat'
+        elif len(metadata['participants']) == 2:
+            metadata['conversation_type'] = 'direct_message'
+
+    except Exception as e:
+        log.debug(f"Failed to extract participants from HTML: {e}")
+        # Return minimal metadata
+        metadata['participants'] = []
+        metadata['participant_count'] = 0
+
+    return metadata
 
 
 def parse_args() -> argparse.Namespace:
@@ -596,7 +813,7 @@ class Settings:
     query_expansion_count: int = int(os.getenv("QUERY_EXPANSION_COUNT", "2"))
 
     # Enhanced metadata extraction
-    extract_enhanced_metadata: bool = os.getenv("EXTRACT_ENHANCED_METADATA", "0") == "1"
+    extract_enhanced_metadata: bool = os.getenv("EXTRACT_ENHANCED_METADATA", "1") == "1"
 
     # Semantic caching configuration
     enable_semantic_cache: bool = os.getenv("ENABLE_SEMANTIC_CACHE", "0") == "1"
@@ -1187,8 +1404,23 @@ class HybridRetriever(BaseRetriever):
             self._alpha = 1.0
             return
 
+        # Check if corpus is empty
+        if not self._all_nodes or len(self._all_nodes) == 0:
+            log.warning(f"  ⚠️  BM25 corpus is empty (table may be empty or query failed)")
+            log.warning("  ⚠️  Falling back to pure vector search")
+            self._alpha = 1.0
+            return
+
         # Tokenize corpus for BM25
         self._tokenized_corpus = [doc.get_content().lower().split() for doc in self._all_nodes]
+
+        # Double-check tokenized corpus isn't empty
+        if not self._tokenized_corpus or len(self._tokenized_corpus) == 0:
+            log.warning(f"  ⚠️  Tokenized corpus is empty")
+            log.warning("  ⚠️  Falling back to pure vector search")
+            self._alpha = 1.0
+            return
+
         self._bm25 = BM25Okapi(self._tokenized_corpus)
 
         log.info(f"  ✓ BM25 index initialized in {dur_s(t):.2f}s")
@@ -1338,7 +1570,7 @@ class HybridRetriever(BaseRetriever):
         from collections import defaultdict
 
         # Normalize scores to [0, 1]
-        def normalize_scores(results):
+        def normalize_scores(results, score_type=""):
             if not results:
                 return {}
             scores = [score for _, score in results]
@@ -1346,18 +1578,27 @@ class HybridRetriever(BaseRetriever):
             max_score = max(scores)
             range_score = max_score - min_score if max_score > min_score else 1.0
 
+            # Debug logging
+            if scores:
+                log.info(f"  • {score_type} scores: min={min_score:.4f}, max={max_score:.4f}, range={range_score:.4f}")
+                if range_score < 0.001:
+                    log.warning(f"    ⚠️  Very small score range! Results may all look similar.")
+
             normalized = {}
             for node, score in results:
                 node_id = node.node_id if hasattr(node, 'node_id') else id(node)
                 normalized[node_id] = (node, (score - min_score) / range_score)
             return normalized
 
-        vector_norm = normalize_scores(vector_results)
-        bm25_norm = normalize_scores(bm25_results)
+        vector_norm = normalize_scores(vector_results, "Vector")
+        bm25_norm = normalize_scores(bm25_results, "BM25")
 
         # Combine scores
         all_node_ids = set(vector_norm.keys()) | set(bm25_norm.keys())
         combined = []
+
+        log.info(f"  • Combining {len(vector_norm)} vector + {len(bm25_norm)} BM25 results")
+        log.info(f"  • Hybrid alpha (α={alpha:.2f}): {alpha*100:.0f}% vector + {(1-alpha)*100:.0f}% BM25")
 
         for node_id in all_node_ids:
             node = None
@@ -1375,6 +1616,13 @@ class HybridRetriever(BaseRetriever):
 
         # Sort by hybrid score
         combined.sort(key=lambda x: x[1], reverse=True)
+
+        # Debug: Show top 3 combined scores
+        log.info(f"  • Top 3 hybrid scores:")
+        for i, (node, score) in enumerate(combined[:3], 1):
+            node_id_short = node.node_id[:8] if hasattr(node, 'node_id') else 'unknown'
+            log.info(f"    [{i}] {node_id_short}... → {score:.4f}")
+
         return combined
 
     def _parse_metadata_filters(self, query: str) -> Tuple[dict, str]:
@@ -1903,25 +2151,55 @@ def load_documents(doc_path: str) -> List[Any]:
 
         log.info(f"  Found {file_count} supported file(s)")
 
-        # Load all documents recursively
+        # Load all documents recursively with error tracking
         reader = SimpleDirectoryReader(
             input_dir=str(path),
             recursive=True,
             required_exts=supported_extensions,
         )
+
+        # Capture initial doc count to track failures
+        initial_file_count = file_count
         docs = reader.load_data()
 
-        # Clean HTML documents
+        # Calculate and report success rate
+        loaded_count = len(docs)
+        failed_count = initial_file_count - loaded_count
+        success_rate = (loaded_count / initial_file_count * 100) if initial_file_count > 0 else 0
+
+        if failed_count > 0:
+            log.warning(f"  ⚠️  Failed to load {failed_count} file(s) due to corruption or format issues")
+        log.info(f"  ✓ Successfully loaded {loaded_count}/{initial_file_count} files ({success_rate:.1f}% success rate)")
+
+        # Extract metadata from HTML documents BEFORE cleaning (to preserve structure)
         html_count = 0
+        messenger_count = 0
         for doc in docs:
             source = doc.metadata.get("file_path", "") or doc.metadata.get("source", "")
             if source.lower().endswith((".html", ".htm")):
+                # Extract participants from raw HTML structure (before cleaning removes tags)
+                messenger_meta = extract_messenger_participants_from_html(doc.text, source)
+                if messenger_meta.get('participants'):
+                    # Store document-level participants (will propagate to all chunks)
+                    doc.metadata['_doc_participants'] = messenger_meta['participants']
+                    doc.metadata['_doc_participant_count'] = messenger_meta['participant_count']
+                    if 'conversation_partner' in messenger_meta:
+                        doc.metadata['_conversation_partner'] = messenger_meta['conversation_partner']
+                    if 'export_author' in messenger_meta:
+                        doc.metadata['_export_author'] = messenger_meta['export_author']
+                    if 'conversation_type' in messenger_meta:
+                        doc.metadata['_conversation_type'] = messenger_meta['conversation_type']
+                    messenger_count += 1
+
+                # Now clean the HTML (removes tags)
                 cleaned_text = clean_html_content(doc.text)
                 doc.set_content(cleaned_text)
                 html_count += 1
 
         if html_count > 0:
             log.info(f"  🧹 Cleaned {html_count} HTML file(s) (removed tags/scripts/styles)")
+        if messenger_count > 0:
+            log.info(f"  💬 Extracted participants from {messenger_count} Messenger file(s)")
 
         # Calculate total text statistics for folder
         total_chars = sum(len(doc.text) for doc in docs)
@@ -2126,7 +2404,9 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
     chat_logs_detected = 0
 
     for i, chunk in enumerate(chunks):
-        n = TextNode(text=chunk)
+        # Remove NUL bytes (0x00) that PostgreSQL cannot store in text fields
+        sanitized_chunk = chunk.replace('\x00', '')
+        n = TextNode(text=sanitized_chunk)
 
         # Start with source document metadata
         src_doc = docs[doc_idxs[i]]
@@ -2139,9 +2419,23 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
         n.metadata["_embed_model"] = S.embed_model_name
         n.metadata["_index_signature"] = index_signature
 
+        # Propagate document-level participants to chunk (if extracted from HTML)
+        # This ensures ALL chunks from a Messenger conversation have the same participants
+        if '_doc_participants' in n.metadata:
+            n.metadata['_participants'] = n.metadata['_doc_participants']
+            n.metadata['_participant_count'] = n.metadata['_doc_participant_count']
+            if '_conversation_partner' in n.metadata:
+                n.metadata['_conversation_partner'] = n.metadata.get('_conversation_partner')
+            if '_export_author' in n.metadata:
+                n.metadata['_export_author'] = n.metadata.get('_export_author')
+            if '_conversation_type' in n.metadata:
+                n.metadata['_conversation_type'] = n.metadata.get('_conversation_type')
+
         # Extract chat metadata if this looks like a chat log
         if os.getenv("EXTRACT_CHAT_METADATA", "1") == "1":
-            chat_meta = extract_chat_metadata(chunk)
+            # Get file path from document metadata for enhanced extraction
+            file_path = n.metadata.get("file_path", n.metadata.get("source", ""))
+            chat_meta = extract_chat_metadata(chunk, file_path=file_path)
             if chat_meta:
                 n.metadata.update(chat_meta)
                 chat_logs_detected += 1

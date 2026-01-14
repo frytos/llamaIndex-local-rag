@@ -1,0 +1,812 @@
+{
+  "id": null,
+  "uid": "rag-system-resources",
+  "title": "RAG System Resources (M1 Mac)",
+  "description": "M1-specific resource monitoring: CPU, memory, Metal GPU, disk I/O, and process metrics",
+  "tags": ["rag", "resources", "m1", "system"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m"],
+    "time_options": ["5m", "15m", "1h", "3h", "6h"]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "System Overview",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "gauge",
+      "title": "System CPU Usage",
+      "description": "Overall CPU utilization (macOS)",
+      "gridPos": {"x": 0, "y": 1, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "macos_cpu_percent",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 60, "color": "yellow"},
+              {"value": 80, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 3,
+      "type": "gauge",
+      "title": "System Memory Usage",
+      "description": "Overall memory utilization (macOS)",
+      "gridPos": {"x": 6, "y": 1, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "macos_memory_percent",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 70, "color": "yellow"},
+              {"value": 85, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 4,
+      "type": "gauge",
+      "title": "RAG Process CPU",
+      "description": "CPU usage by RAG process",
+      "gridPos": {"x": 12, "y": 1, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "rag_process_cpu_percent",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 50, "color": "yellow"},
+              {"value": 80, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Active Threads",
+      "description": "Number of active threads in RAG process",
+      "gridPos": {"x": 18, "y": 1, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "rag_process_threads_active",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 20, "color": "yellow"},
+              {"value": 50, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "CPU & Load",
+      "gridPos": {"x": 0, "y": 7, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "CPU Usage Over Time",
+      "description": "System vs RAG process CPU usage",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "macos_cpu_percent",
+          "refId": "A",
+          "legendFormat": "System Total"
+        },
+        {
+          "expr": "rag_process_cpu_percent",
+          "refId": "B",
+          "legendFormat": "RAG Process"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "System Total"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "RAG Process"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Load Average",
+      "description": "1m, 5m, 15m load averages",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "macos_load_avg_1m",
+          "refId": "A",
+          "legendFormat": "1 min"
+        },
+        {
+          "expr": "macos_load_avg_5m",
+          "refId": "B",
+          "legendFormat": "5 min"
+        },
+        {
+          "expr": "macos_load_avg_15m",
+          "refId": "C",
+          "legendFormat": "15 min"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Memory Breakdown",
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "System Memory Breakdown",
+      "description": "Active, wired, inactive, and free memory",
+      "gridPos": {"x": 0, "y": 17, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "macos_memory_active_bytes",
+          "refId": "A",
+          "legendFormat": "Active"
+        },
+        {
+          "expr": "macos_memory_wired_bytes",
+          "refId": "B",
+          "legendFormat": "Wired"
+        },
+        {
+          "expr": "macos_memory_inactive_bytes",
+          "refId": "C",
+          "legendFormat": "Inactive"
+        },
+        {
+          "expr": "macos_memory_free_bytes",
+          "refId": "D",
+          "legendFormat": "Free"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "max"]
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "RAG Process Memory",
+      "description": "RSS and VMS memory usage",
+      "gridPos": {"x": 12, "y": 17, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "rag_process_memory_rss_bytes",
+          "refId": "A",
+          "legendFormat": "RSS (Resident)"
+        },
+        {
+          "expr": "rag_process_memory_vms_bytes",
+          "refId": "B",
+          "legendFormat": "VMS (Virtual)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "bargauge",
+      "title": "Memory Usage by Component",
+      "description": "Memory breakdown: embedding model, LLM, cache, Python heap",
+      "gridPos": {"x": 0, "y": 25, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "rag_memory_embedding_model_bytes",
+          "refId": "A",
+          "legendFormat": "Embedding Model"
+        },
+        {
+          "expr": "rag_memory_llm_model_bytes",
+          "refId": "B",
+          "legendFormat": "LLM Model"
+        },
+        {
+          "expr": "rag_memory_cache_bytes",
+          "refId": "C",
+          "legendFormat": "Cache"
+        },
+        {
+          "expr": "rag_memory_python_heap_bytes",
+          "refId": "D",
+          "legendFormat": "Python Heap"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 1073741824, "color": "yellow"},
+              {"value": 2147483648, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Total System Memory",
+      "description": "Total physical memory",
+      "gridPos": {"x": 12, "y": 25, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "macos_memory_total_bytes",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 1
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Available Memory",
+      "description": "Memory available for allocation",
+      "gridPos": {"x": 18, "y": 25, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "macos_memory_available_bytes",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 2147483648, "color": "yellow"},
+              {"value": 4294967296, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Swap Usage",
+      "description": "Swap space used",
+      "gridPos": {"x": 12, "y": 29, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "macos_swap_percent",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 10, "color": "yellow"},
+              {"value": 30, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background"
+      }
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Swap I/O",
+      "description": "Swap in/out activity",
+      "gridPos": {"x": 18, "y": 29, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "rate(macos_swap_sin_bytes[1m])",
+          "refId": "A",
+          "legendFormat": "In"
+        },
+        {
+          "expr": "rate(macos_swap_sout_bytes[1m])",
+          "refId": "B",
+          "legendFormat": "Out"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 1048576, "color": "yellow"},
+              {"value": 10485760, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "Python & Garbage Collection",
+      "gridPos": {"x": 0, "y": 33, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Garbage Collection Activity",
+      "description": "GC collections by generation",
+      "gridPos": {"x": 0, "y": 34, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "rate(rag_process_gc_collections_total{generation=\"0\"}[1m])",
+          "refId": "A",
+          "legendFormat": "Gen 0"
+        },
+        {
+          "expr": "rate(rag_process_gc_collections_total{generation=\"1\"}[1m])",
+          "refId": "B",
+          "legendFormat": "Gen 1"
+        },
+        {
+          "expr": "rate(rag_process_gc_collections_total{generation=\"2\"}[1m])",
+          "refId": "C",
+          "legendFormat": "Gen 2"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "GC Duration",
+      "description": "Last garbage collection duration",
+      "gridPos": {"x": 12, "y": 34, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_process_gc_duration_seconds",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 0.1, "color": "yellow"},
+              {"value": 0.5, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Python Heap Size",
+      "description": "Approximate Python heap memory",
+      "gridPos": {"x": 18, "y": 34, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_memory_python_heap_bytes",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 1
+        }
+      }
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Active Threads",
+      "description": "Number of active Python threads",
+      "gridPos": {"x": 12, "y": 38, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_process_threads_active",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Process Count",
+      "description": "Total system processes",
+      "gridPos": {"x": 18, "y": 38, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "macos_process_count",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "row",
+      "title": "Disk I/O",
+      "gridPos": {"x": 0, "y": 42, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 24,
+      "type": "gauge",
+      "title": "Disk Usage",
+      "description": "Root filesystem usage percentage",
+      "gridPos": {"x": 0, "y": 43, "w": 8, "h": 6},
+      "targets": [{
+        "expr": "macos_disk_usage_percent{path=\"/\"}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 70, "color": "yellow"},
+              {"value": 90, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "Disk Free Space",
+      "description": "Available disk space",
+      "gridPos": {"x": 8, "y": 43, "w": 8, "h": 6},
+      "targets": [{
+        "expr": "macos_disk_free_bytes{path=\"/\"}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 10737418240, "color": "yellow"},
+              {"value": 53687091200, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 26,
+      "type": "stat",
+      "title": "Disk Total Capacity",
+      "description": "Total disk capacity",
+      "gridPos": {"x": 16, "y": 43, "w": 8, "h": 6},
+      "targets": [{
+        "expr": "macos_disk_total_bytes{path=\"/\"}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 1
+        }
+      }
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "Network Traffic",
+      "description": "Network bytes sent/received",
+      "gridPos": {"x": 0, "y": 49, "w": 24, "h": 8},
+      "targets": [
+        {
+          "expr": "rate(macos_network_bytes_sent_total[1m])",
+          "refId": "A",
+          "legendFormat": "{{interface}} sent"
+        },
+        {
+          "expr": "rate(macos_network_bytes_recv_total[1m])",
+          "refId": "B",
+          "legendFormat": "{{interface}} recv"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "max"]
+        }
+      }
+    },
+    {
+      "id": 28,
+      "type": "row",
+      "title": "Resource Alerts",
+      "gridPos": {"x": 0, "y": 57, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 29,
+      "type": "table",
+      "title": "Resource Health Status",
+      "description": "Current resource utilization status",
+      "gridPos": {"x": 0, "y": 58, "w": 24, "h": 6},
+      "targets": [
+        {
+          "expr": "macos_cpu_percent",
+          "refId": "A",
+          "legendFormat": "CPU",
+          "instant": true
+        },
+        {
+          "expr": "macos_memory_percent",
+          "refId": "B",
+          "legendFormat": "Memory",
+          "instant": true
+        },
+        {
+          "expr": "macos_disk_usage_percent{path=\"/\"}",
+          "refId": "C",
+          "legendFormat": "Disk",
+          "instant": true
+        },
+        {
+          "expr": "macos_swap_percent",
+          "refId": "D",
+          "legendFormat": "Swap",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Usage %"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "width": 150
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 70, "color": "yellow"},
+              {"value": 90, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rag_postgres
+    environment:
+      POSTGRES_USER: ${PGUSER:-postgres}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-vector_db}
+      # Optimize for low memory
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_WORK_MEM: 16MB
+    ports:
+      - "${PGPORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Memory limits for development
+    mem_limit: 512m
+    mem_reservation: 256m
+    cpus: 2
+
+volumes:
+  postgres_data:

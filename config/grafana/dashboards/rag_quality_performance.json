@@ -1,0 +1,856 @@
+{
+  "id": null,
+  "uid": "rag-quality-performance",
+  "title": "RAG Quality & Performance",
+  "description": "Query quality, retrieval effectiveness, cache performance, and user experience metrics",
+  "tags": ["rag", "quality", "performance", "ux"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["30s", "1m", "5m", "15m"],
+    "time_options": ["1h", "6h", "12h", "24h", "7d", "30d"]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Quality Overview",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Overall Success Rate",
+      "description": "Query success rate over selected time range",
+      "gridPos": {"x": 0, "y": 1, "w": 6, "h": 5},
+      "targets": [{
+        "expr": "(sum(increase(rag_query_success_total[$__range])) / sum(increase(rag_query_total[$__range]))) * 100",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 95, "color": "yellow"},
+              {"value": 99, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Average Retrieval Score",
+      "description": "Average similarity score for retrieved documents",
+      "gridPos": {"x": 6, "y": 1, "w": 6, "h": 5},
+      "targets": [{
+        "expr": "rag_retrieval_score_avg",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 4,
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 0.6, "color": "yellow"},
+              {"value": 0.8, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Cache Hit Rate",
+      "description": "Percentage of queries served from cache",
+      "gridPos": {"x": 12, "y": 1, "w": 6, "h": 5},
+      "targets": [{
+        "expr": "rag_cache_hit_rate * 100",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 50, "color": "yellow"},
+              {"value": 80, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "User Satisfaction",
+      "description": "Average user satisfaction score (0-5)",
+      "gridPos": {"x": 18, "y": 1, "w": 6, "h": 5},
+      "targets": [{
+        "expr": "rag_answer_satisfaction_score",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "min": 0,
+          "max": 5,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 3, "color": "yellow"},
+              {"value": 4, "color": "green"}
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {"text": "No feedback"}
+              }
+            }
+          ]
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Performance Metrics",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Query Latency Percentiles",
+      "description": "Query latency distribution (p50, p95, p99)",
+      "gridPos": {"x": 0, "y": 7, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(rag_query_duration_seconds_bucket[5m]))",
+          "refId": "A",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(rag_query_duration_seconds_bucket[5m]))",
+          "refId": "B",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(rag_query_duration_seconds_bucket[5m]))",
+          "refId": "C",
+          "legendFormat": "p99"
+        },
+        {
+          "expr": "rate(rag_query_duration_seconds_sum[5m]) / rate(rag_query_duration_seconds_count[5m])",
+          "refId": "D",
+          "legendFormat": "average"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 0
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "p50"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "p95"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "p99"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "average"},
+            "properties": [
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}},
+              {"id": "custom.lineStyle", "value": {"dash": [10, 10], "fill": "dash"}}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "max", "min"]
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "heatmap",
+      "title": "Query Latency Distribution",
+      "description": "Heatmap of query latencies over time",
+      "gridPos": {"x": 12, "y": 7, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "sum(rate(rag_query_duration_seconds_bucket[5m])) by (le)",
+        "refId": "A",
+        "format": "heatmap",
+        "legendFormat": "{{le}}"
+      }],
+      "options": {
+        "calculate": true,
+        "calculation": {
+          "xBuckets": {
+            "mode": "size",
+            "value": "1m"
+          }
+        },
+        "color": {
+          "mode": "scheme",
+          "scheme": "Spectral",
+          "exponent": 0.5,
+          "fill": "dark-orange"
+        },
+        "yAxis": {
+          "unit": "s",
+          "decimals": 1
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Retrieval Quality",
+      "gridPos": {"x": 0, "y": 15, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Retrieval Score Trends",
+      "description": "Retrieval quality over time (avg, p50, p95, p99, top)",
+      "gridPos": {"x": 0, "y": 16, "w": 16, "h": 8},
+      "targets": [
+        {
+          "expr": "rag_retrieval_score_avg",
+          "refId": "A",
+          "legendFormat": "Average"
+        },
+        {
+          "expr": "rag_retrieval_score_p50",
+          "refId": "B",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "rag_retrieval_score_p95",
+          "refId": "C",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "rag_retrieval_score_p99",
+          "refId": "D",
+          "legendFormat": "p99"
+        },
+        {
+          "expr": "rag_retrieval_top_score",
+          "refId": "E",
+          "legendFormat": "Top Score"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "decimals": 3,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "max", "min"]
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Retrieval Score Variance",
+      "description": "Variance in retrieval scores (lower is better)",
+      "gridPos": {"x": 16, "y": 16, "w": 8, "h": 4},
+      "targets": [{
+        "expr": "rag_retrieval_score_variance",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 0.05, "color": "yellow"},
+              {"value": 0.1, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Relevant Documents",
+      "description": "User-marked relevant documents",
+      "gridPos": {"x": 16, "y": 20, "w": 8, "h": 4},
+      "targets": [{
+        "expr": "rag_retrieval_documents_relevant_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "Cache Performance",
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Cache Hit Rate Over Time",
+      "description": "Cache effectiveness over time",
+      "gridPos": {"x": 0, "y": 25, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "rate(rag_cache_hits_total[5m]) / rate(rag_cache_requests_total[5m]) * 100",
+          "refId": "A",
+          "legendFormat": "Hit Rate %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 30
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "transparent"},
+              {"value": 50, "color": "yellow"},
+              {"value": 80, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "showLegend": true
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Cache Operations",
+      "description": "Cache hits vs misses over time",
+      "gridPos": {"x": 12, "y": 25, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "rate(rag_cache_hits_total[1m])",
+          "refId": "A",
+          "legendFormat": "Hits/sec"
+        },
+        {
+          "expr": "rate(rag_cache_misses_total[1m])",
+          "refId": "B",
+          "legendFormat": "Misses/sec"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 50,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Hits/sec"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Misses/sec"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]
+          }
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "type": "gauge",
+      "title": "Cache Size",
+      "description": "Current cache size in entries",
+      "gridPos": {"x": 0, "y": 33, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "rag_cache_size_entries",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 10000,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "blue"},
+              {"value": 5000, "color": "yellow"},
+              {"value": 8000, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Cache Size (Bytes)",
+      "description": "Cache memory usage",
+      "gridPos": {"x": 6, "y": 33, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "rag_cache_size_bytes",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 536870912, "color": "yellow"},
+              {"value": 1073741824, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Cache Evictions",
+      "description": "Total cache evictions",
+      "gridPos": {"x": 12, "y": 33, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "rag_cache_evictions_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 100, "color": "yellow"},
+              {"value": 1000, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background"
+      }
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Semantic Similarity Threshold",
+      "description": "Cache semantic similarity threshold",
+      "gridPos": {"x": 18, "y": 33, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "rag_cache_semantic_similarity_threshold",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Query & Answer Analytics",
+      "gridPos": {"x": 0, "y": 39, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Query Length Trends",
+      "description": "Query length in characters over time",
+      "gridPos": {"x": 0, "y": 40, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "rag_query_length_chars",
+        "refId": "A",
+        "legendFormat": "Query Length"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 5,
+            "lineInterpolation": "smooth",
+            "fillOpacity": 0
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "showLegend": true
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Answer Length Trends",
+      "description": "Answer length in characters over time",
+      "gridPos": {"x": 12, "y": 40, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "rag_answer_length_chars",
+        "refId": "A",
+        "legendFormat": "Answer Length"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 5,
+            "lineInterpolation": "smooth",
+            "fillOpacity": 0
+          }
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Average Query Length",
+      "description": "Average query length in characters",
+      "gridPos": {"x": 0, "y": 48, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "avg_over_time(rag_query_length_chars[1h])",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "Average Answer Length",
+      "description": "Average answer length in characters",
+      "gridPos": {"x": 6, "y": 48, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "avg_over_time(rag_answer_length_chars[1h])",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "Average Sources Cited",
+      "description": "Average number of sources cited per answer",
+      "gridPos": {"x": 12, "y": 48, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "avg_over_time(rag_answer_sources_cited[1h])",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 2, "color": "yellow"},
+              {"value": 3, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 26,
+      "type": "stat",
+      "title": "Query Tokens",
+      "description": "Average query length in tokens",
+      "gridPos": {"x": 18, "y": 48, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "avg_over_time(rag_query_tokens[1h])",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 27,
+      "type": "row",
+      "title": "Throughput & Volume",
+      "gridPos": {"x": 0, "y": 52, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "Query Throughput",
+      "description": "Queries per second over time",
+      "gridPos": {"x": 0, "y": 53, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "rate(rag_query_total[1m])",
+        "refId": "A",
+        "legendFormat": "QPS"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "qps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 30
+          }
+        }
+      }
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "Query Volume",
+      "description": "Cumulative queries over time",
+      "gridPos": {"x": 12, "y": 53, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "rag_query_total",
+        "refId": "A",
+        "legendFormat": "Total Queries"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20
+          }
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Database Health",
+      "gridPos": {"x": 0, "y": 61, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "Total Vector Store Rows",
+      "description": "Total documents in vector database",
+      "gridPos": {"x": 0, "y": 62, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_db_rows_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "Database Operations",
+      "description": "Total database operations",
+      "gridPos": {"x": 6, "y": 62, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_db_operations_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 33,
+      "type": "stat",
+      "title": "Database Errors",
+      "description": "Total database errors",
+      "gridPos": {"x": 12, "y": 62, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_db_errors_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 1, "color": "yellow"},
+              {"value": 10, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background"
+      }
+    },
+    {
+      "id": 34,
+      "type": "stat",
+      "title": "Database Error Rate",
+      "description": "Database errors per operation",
+      "gridPos": {"x": 18, "y": 62, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "(rag_db_errors_total / rag_db_operations_total) * 100",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 0.1, "color": "yellow"},
+              {"value": 1, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background"
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

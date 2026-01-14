@@ -101,3 +101,63 @@ def generate_table_name(
     date_str = datetime.now().strftime("%y%m%d")
 
     return f"{name}_cs{chunk_size}_ov{chunk_overlap}_{model_short}_{date_str}"
+
+
+def normalize_table_name_for_pgvector(table_name: str) -> str:
+    """Normalize table name for PGVectorStore compatibility.
+
+    PGVectorStore automatically prepends "data_" to all table names.
+    If the provided name already starts with "data_", we strip it
+    to prevent double-prefixing (e.g., "data_data_table").
+
+    Args:
+        table_name: Raw table name (may or may not start with "data_")
+
+    Returns:
+        Normalized table name safe for PGVectorStore
+
+    Examples:
+        >>> normalize_table_name_for_pgvector("data_messages_cs500")
+        'messages_cs500'
+        >>> normalize_table_name_for_pgvector("messages_cs500")
+        'messages_cs500'
+        >>> normalize_table_name_for_pgvector("")
+        Traceback (most recent call last):
+        ...
+        ValueError: Table name cannot be empty
+
+    Raises:
+        ValueError: If table_name is empty or invalid
+    """
+    if not table_name or not table_name.strip():
+        raise ValueError("Table name cannot be empty")
+
+    table_name = table_name.strip()
+
+    # Strip "data_" prefix if present (PGVectorStore will add it back)
+    if table_name.startswith("data_"):
+        return table_name[5:]  # Remove "data_" prefix
+
+    return table_name
+
+
+def get_actual_table_name(table_name: str) -> str:
+    """Get the actual PostgreSQL table name after PGVectorStore processing.
+
+    Use this when you need to query the database directly (not through PGVectorStore).
+
+    Args:
+        table_name: Table name as provided by user
+
+    Returns:
+        Actual table name in PostgreSQL (with "data_" prefix)
+
+    Examples:
+        >>> get_actual_table_name("messages_cs500")
+        'data_messages_cs500'
+        >>> get_actual_table_name("data_messages_cs500")
+        'data_messages_cs500'
+    """
+    if not table_name.startswith("data_"):
+        return f"data_{table_name}"
+    return table_name

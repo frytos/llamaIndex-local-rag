@@ -1,0 +1,802 @@
+{
+  "id": null,
+  "uid": "rag-pipeline-internals",
+  "title": "RAG Pipeline Internals",
+  "description": "Deep dive into RAG pipeline stages: embedding, retrieval, and LLM generation",
+  "tags": ["rag", "pipeline", "performance"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"],
+    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h"]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Pipeline Overview",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total Query Time (Avg)",
+      "description": "Average end-to-end query latency",
+      "gridPos": {"x": 0, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rate(rag_query_duration_seconds_sum[5m]) / rate(rag_query_duration_seconds_count[5m])",
+        "refId": "A",
+        "legendFormat": "Query Duration"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 2, "color": "yellow"},
+              {"value": 5, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Success Rate",
+      "description": "Query success rate (last 5 minutes)",
+      "gridPos": {"x": 6, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "(sum(rate(rag_query_success_total[5m])) / sum(rate(rag_query_total[5m]))) * 100",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 95, "color": "yellow"},
+              {"value": 99, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Queries/Second",
+      "description": "Query throughput",
+      "gridPos": {"x": 12, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rate(rag_query_total[1m])",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "qps",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "blue"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Total Queries",
+      "description": "Total queries in time range",
+      "gridPos": {"x": 18, "y": 1, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_query_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"value": 0, "color": "blue"}]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Pipeline Stage Breakdown",
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Stage Duration Over Time",
+      "description": "Time spent in each pipeline stage",
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "rate(rag_pipeline_stage_duration_seconds_sum{stage=\"embedding\"}[1m]) / rate(rag_pipeline_stage_duration_seconds_count{stage=\"embedding\"}[1m])",
+          "refId": "A",
+          "legendFormat": "Embedding"
+        },
+        {
+          "expr": "rate(rag_pipeline_stage_duration_seconds_sum{stage=\"retrieval\"}[1m]) / rate(rag_pipeline_stage_duration_seconds_count{stage=\"retrieval\"}[1m])",
+          "refId": "B",
+          "legendFormat": "Retrieval"
+        },
+        {
+          "expr": "rate(rag_pipeline_stage_duration_seconds_sum{stage=\"generation\"}[1m]) / rate(rag_pipeline_stage_duration_seconds_count{stage=\"generation\"}[1m])",
+          "refId": "C",
+          "legendFormat": "Generation"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Embedding"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Retrieval"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Generation"},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "piechart",
+      "title": "Stage Duration Distribution (Avg)",
+      "description": "Percentage of time spent in each stage",
+      "gridPos": {"x": 12, "y": 6, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(rag_pipeline_stage_duration_seconds_sum{stage=\"embedding\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "Embedding"
+        },
+        {
+          "expr": "sum(rate(rag_pipeline_stage_duration_seconds_sum{stage=\"retrieval\"}[5m]))",
+          "refId": "B",
+          "legendFormat": "Retrieval"
+        },
+        {
+          "expr": "sum(rate(rag_pipeline_stage_duration_seconds_sum{stage=\"generation\"}[5m]))",
+          "refId": "C",
+          "legendFormat": "Generation"
+        }
+      ],
+      "options": {
+        "pieType": "donut",
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "values": ["value", "percent"]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Embedding Performance",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "gauge",
+      "title": "Embedding Throughput",
+      "description": "Embeddings generated per second",
+      "gridPos": {"x": 0, "y": 15, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "rag_embeddings_per_second",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "max": 200,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 30, "color": "yellow"},
+              {"value": 60, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Embedding Duration (Avg)",
+      "description": "Average embedding operation time",
+      "gridPos": {"x": 6, "y": 15, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "rate(rag_embedding_duration_seconds_sum[5m]) / rate(rag_embedding_duration_seconds_count[5m])",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 0.1, "color": "yellow"},
+              {"value": 0.5, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 12,
+      "type": "gauge",
+      "title": "Batch Utilization",
+      "description": "Embedding batch size utilization",
+      "gridPos": {"x": 12, "y": 15, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "rag_embedding_batch_utilization_percent",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 50, "color": "yellow"},
+              {"value": 80, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Embedding Errors",
+      "description": "Total embedding errors",
+      "gridPos": {"x": 18, "y": 15, "w": 6, "h": 6},
+      "targets": [{
+        "expr": "rag_embedding_errors_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 1, "color": "yellow"},
+              {"value": 10, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background"
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Retrieval Performance",
+      "gridPos": {"x": 0, "y": 21, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Retrieval Scores Over Time",
+      "description": "Average, p50, p95, p99 retrieval similarity scores",
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "rag_retrieval_score_avg",
+          "refId": "A",
+          "legendFormat": "Average"
+        },
+        {
+          "expr": "rag_retrieval_score_p50",
+          "refId": "B",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "rag_retrieval_score_p95",
+          "refId": "C",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "rag_retrieval_score_p99",
+          "refId": "D",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "decimals": 3,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Top Retrieval Score",
+      "description": "Highest similarity score",
+      "gridPos": {"x": 12, "y": 22, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_retrieval_top_score",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 4,
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 0.7, "color": "yellow"},
+              {"value": 0.85, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Score Variance",
+      "description": "Variance in retrieval scores",
+      "gridPos": {"x": 18, "y": 22, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_retrieval_score_variance",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 0.05, "color": "yellow"},
+              {"value": 0.1, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Documents Retrieved",
+      "description": "Total documents retrieved",
+      "gridPos": {"x": 12, "y": 26, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_retrieval_documents_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Relevant Documents",
+      "description": "User-marked relevant documents",
+      "gridPos": {"x": 18, "y": 26, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_retrieval_documents_relevant_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"value": 0, "color": "blue"}]
+          }
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "LLM Generation Performance",
+      "gridPos": {"x": 0, "y": 30, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 21,
+      "type": "gauge",
+      "title": "Token Generation Speed",
+      "description": "Tokens generated per second",
+      "gridPos": {"x": 0, "y": 31, "w": 8, "h": 6},
+      "targets": [{
+        "expr": "rag_llm_tokens_per_second",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "tps",
+          "min": 0,
+          "max": 50,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "red"},
+              {"value": 5, "color": "yellow"},
+              {"value": 10, "color": "green"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 22,
+      "type": "gauge",
+      "title": "Context Utilization",
+      "description": "Percentage of context window used",
+      "gridPos": {"x": 8, "y": 31, "w": 8, "h": 6},
+      "targets": [{
+        "expr": "rag_llm_context_utilization_percent",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 70, "color": "yellow"},
+              {"value": 90, "color": "red"}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Total Tokens Generated",
+      "description": "Total tokens generated by LLM",
+      "gridPos": {"x": 16, "y": 31, "w": 8, "h": 6},
+      "targets": [{
+        "expr": "rag_llm_tokens_generated_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"value": 0, "color": "blue"}]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "LLM Generation Duration",
+      "description": "Time spent generating responses",
+      "gridPos": {"x": 0, "y": 37, "w": 12, "h": 6},
+      "targets": [{
+        "expr": "rate(rag_llm_generation_duration_seconds_sum[1m]) / rate(rag_llm_generation_duration_seconds_count[1m])",
+        "refId": "A",
+        "legendFormat": "Avg Generation Time"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 20
+          }
+        }
+      }
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Context Window Usage",
+      "description": "Tokens used vs available in context",
+      "gridPos": {"x": 12, "y": 37, "w": 12, "h": 6},
+      "targets": [
+        {
+          "expr": "rag_llm_context_tokens_used",
+          "refId": "A",
+          "legendFormat": "Tokens Used"
+        },
+        {
+          "expr": "rag_llm_context_tokens_available",
+          "refId": "B",
+          "legendFormat": "Tokens Available"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Tokens Available"},
+            "properties": [
+              {"id": "custom.fillOpacity", "value": 0},
+              {"id": "custom.lineStyle", "value": {"dash": [10, 10], "fill": "dash"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "type": "row",
+      "title": "Chunking & Indexing",
+      "gridPos": {"x": 0, "y": 43, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 27,
+      "type": "stat",
+      "title": "Chunks Per Document",
+      "description": "Average number of chunks per document",
+      "gridPos": {"x": 0, "y": 44, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_chunks_per_document",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1
+        }
+      }
+    },
+    {
+      "id": 28,
+      "type": "stat",
+      "title": "Chunk Size p50",
+      "description": "Median chunk size in bytes",
+      "gridPos": {"x": 6, "y": 44, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_chunk_size_bytes_p50",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 29,
+      "type": "stat",
+      "title": "Chunk Size p95",
+      "description": "95th percentile chunk size",
+      "gridPos": {"x": 12, "y": 44, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_chunk_size_bytes_p95",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "stat",
+      "title": "Chunk Overlap",
+      "description": "Chunk overlap size in bytes",
+      "gridPos": {"x": 18, "y": 44, "w": 6, "h": 4},
+      "targets": [{
+        "expr": "rag_chunk_overlap_bytes",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "Indexing Throughput",
+      "description": "Documents indexed per second",
+      "gridPos": {"x": 0, "y": 48, "w": 8, "h": 4},
+      "targets": [{
+        "expr": "rag_documents_indexed_per_second",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2
+        }
+      }
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "Total Documents Indexed",
+      "description": "Total documents indexed",
+      "gridPos": {"x": 8, "y": 48, "w": 8, "h": 4},
+      "targets": [{
+        "expr": "rag_documents_indexed_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 33,
+      "type": "stat",
+      "title": "Total Chunks Created",
+      "description": "Total chunks created from documents",
+      "gridPos": {"x": 16, "y": 48, "w": 8, "h": 4},
+      "targets": [{
+        "expr": "rag_chunks_created_total",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

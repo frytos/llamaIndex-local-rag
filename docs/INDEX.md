@@ -26,7 +26,7 @@
 | [README.md](../README.md) | Project overview | Everyone |
 | [CLAUDE.md](../CLAUDE.md) | Developer guide | Developers |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | How to contribute | Contributors |
-| [FINAL_SUMMARY.md](../FINAL_SUMMARY.md) | Latest improvements | Everyone |
+| [FINAL_SUMMARY.md](reports/sessions/FINAL_SUMMARY.md) | Latest improvements | Everyone |
 
 ---
 
@@ -44,7 +44,7 @@
 - [SCALABILITY_ANALYSIS.md](SCALABILITY_ANALYSIS.md) - Complete scaling roadmap (35KB)
 
 **Security:**
-- [SECURITY_AUDIT.md](../SECURITY_AUDIT.md) - Security scan results and fixes
+- [SECURITY_AUDIT.md](reports/audits/SECURITY_AUDIT.md) - Security scan results and fixes
 
 **Dependencies:**
 - [DEPENDENCY_AUDIT_SUMMARY.md](../DEPENDENCY_AUDIT_SUMMARY.md) - Dependency analysis
@@ -59,8 +59,8 @@
 
 **Additional Context:**
 - [REPO_ORGANIZATION_REPORT.md](../REPO_ORGANIZATION_REPORT.md) - Organization quality analysis (16KB)
-- [REPOSITORY_ORGANIZATION.md](../REPOSITORY_ORGANIZATION.md) - Overview (6.8KB)
-- [ARCHIVE_ORGANIZATION.md](../ARCHIVE_ORGANIZATION.md) - Archive folder guide (9.1KB)
+- [REPOSITORY_ORGANIZATION.md](references/REPOSITORY_ORGANIZATION.md) - Overview (6.8KB)
+- [ARCHIVE_ORGANIZATION.md](references/ARCHIVE_ORGANIZATION.md) - Archive folder guide (9.1KB)
 
 ---
 
@@ -140,7 +140,7 @@
 
 **For Contributors:**
 - [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guidelines ⭐ START HERE
-- [DEVELOPMENT.md](../DEVELOPMENT.md) - Development setup
+- [DEVELOPMENT.md](references/DEVELOPMENT.md) - Development setup
 - [DEV_QUICK_REFERENCE.md](../DEV_QUICK_REFERENCE.md) - Quick commands
 
 **For Understanding Codebase:**
@@ -152,8 +152,8 @@
 ### 📈 Improvement & Change Logs
 
 **Latest (Jan 2026):**
-- [FINAL_SUMMARY.md](../FINAL_SUMMARY.md) - Phase 2 complete summary ⭐ LATEST
-- [AUTONOMOUS_IMPROVEMENTS_COMPLETE.md](../AUTONOMOUS_IMPROVEMENTS_COMPLETE.md) - Phase 1 summary
+- [FINAL_SUMMARY.md](reports/sessions/FINAL_SUMMARY.md) - Phase 2 complete summary ⭐ LATEST
+- [AUTONOMOUS_IMPROVEMENTS_COMPLETE.md](reports/sessions/AUTONOMOUS_IMPROVEMENTS_COMPLETE.md) - Phase 1 summary
 - [IMPROVEMENTS_APPLIED.md](IMPROVEMENTS_APPLIED.md) - Detailed changelog
 
 ---

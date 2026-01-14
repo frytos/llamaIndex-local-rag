@@ -10,8 +10,10 @@ import sys
 from pathlib import Path
 import numpy as np
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add project root and scripts to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / 'scripts'))
 
 # Import after path setup
 import migrate_add_hnsw_indices
