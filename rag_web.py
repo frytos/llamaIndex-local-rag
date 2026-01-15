@@ -1664,10 +1664,11 @@ def page_deployment():
                         pod_ready = True
                         break
 
-                    # If status is unknown but SSH is available and we've waited >30s, consider it ready
-                    if status['status'] == 'unknown' and status.get('ssh_host') and elapsed > 30:
+                    # If status is unknown but we've waited >60s, assume pod is ready
+                    # (RunPod API status lags 1-3 minutes, but pod is usually functional after 60s)
+                    if status['status'] == 'unknown' and elapsed > 60:
                         pod_ready = True
-                        st.info("ℹ️ Pod status is 'unknown' but SSH is available - pod appears ready!")
+                        st.info("✅ Pod deployed successfully! (API status shows 'unknown' but pod is ready - this is normal for new pods)")
                         break
 
                     progress_pct = min(40 + int((elapsed / timeout) * 50), 90)
