@@ -23,9 +23,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/_stcore/health || exit 1
 
-# Set Streamlit-specific environment variables
-ENV STREAMLIT_SERVER_PORT=8080 \
-    STREAMLIT_SERVER_ADDRESS=0.0.0.0
-
-# Start command (Railway overrides port with $PORT)
-CMD ["streamlit", "run", "rag_web.py", "--server.port=8080", "--server.address=0.0.0.0"]
+# Start command - use shell form to allow $PORT expansion
+# Railway sets $PORT dynamically, shell wrapper expands it at runtime
+CMD streamlit run rag_web.py --server.port=${PORT:-8080} --server.address=0.0.0.0
