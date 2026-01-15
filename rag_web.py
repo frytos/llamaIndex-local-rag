@@ -451,7 +451,7 @@ def render_chunk_distribution(chunks: List[str]):
         title="Chunk Size Distribution",
     )
     fig.update_layout(showlegend=False, height=300)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 def render_embedding_visualization(
     embeddings: np.ndarray,
@@ -514,7 +514,7 @@ def render_embedding_visualization(
 
     fig.update_traces(marker=dict(size=6, opacity=0.7))
     fig.update_layout(height=500)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 # =============================================================================
 # Pages
@@ -653,7 +653,7 @@ def page_index():
     # Start Indexing
     st.subheader("5. Start Indexing")
 
-    if st.button("🚀 Start Indexing", type="primary", use_container_width=True):
+    if st.button("🚀 Start Indexing", type="primary", width='stretch'):
         run_indexing(doc_path, table_name, chunk_size, chunk_overlap, embed_model_name, embed_dim, embed_backend, reset_table)
 
 def run_indexing(doc_path: Path, table_name: str, chunk_size: int, chunk_overlap: int,
@@ -1068,10 +1068,10 @@ def page_query():
     col1, col2 = st.columns(2)
 
     with col1:
-        search_and_answer = st.button("🔍 Search & Answer", type="primary", use_container_width=True)
+        search_and_answer = st.button("🔍 Search & Answer", type="primary", width='stretch')
 
     with col2:
-        search_chunks_only = st.button("📄 Search Chunks Only", use_container_width=True)
+        search_chunks_only = st.button("📄 Search Chunks Only", width='stretch')
 
     if search_and_answer or search_chunks_only:
         if not query.strip():
@@ -1208,7 +1208,7 @@ def page_view_indexes():
         df = df[["name", "rows", "chunk_size", "chunk_overlap"]]
         df.columns = ["Name", "Chunks", "Chunk Size", "Overlap"]
 
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width='stretch', hide_index=True)
 
     # Index details and actions
     st.subheader("Index Actions")
@@ -1404,7 +1404,7 @@ def page_deployment():
             })
 
         df = pd.DataFrame(pod_data)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width='stretch', hide_index=True)
 
         # Pod management
         st.write("**Manage Pod:**")
@@ -2050,7 +2050,7 @@ def page_deployment():
 
         if cost_data:
             df_cost = pd.DataFrame(cost_data)
-            st.dataframe(df_cost, use_container_width=True, hide_index=True)
+            st.dataframe(df_cost, width='stretch', hide_index=True)
 
             # Projection chart
             st.write("**Cost Projection:**")
@@ -2075,7 +2075,7 @@ def page_deployment():
                 height=300
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
         else:
             st.info("No running pods. No current costs.")
@@ -2113,7 +2113,7 @@ def page_deployment():
                             })
 
                         df_gpu = pd.DataFrame(gpu_data)
-                        st.dataframe(df_gpu, use_container_width=True, hide_index=True)
+                        st.dataframe(df_gpu, width='stretch', hide_index=True)
                     else:
                         st.warning("No GPU data available")
 
@@ -2141,7 +2141,7 @@ def page_deployment():
                 })
 
             df_scenarios = pd.DataFrame(cost_scenarios)
-            st.dataframe(df_scenarios, use_container_width=True, hide_index=True)
+            st.dataframe(df_scenarios, width='stretch', hide_index=True)
 
     with col3:
         if st.button("🔍 System Health", key="health_check"):
