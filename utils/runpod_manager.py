@@ -503,24 +503,43 @@ class RunPodManager:
 
         log.debug(f"SSH host from machine info: {ssh_host}")
 
-        # If empty, RunPod API hasn't updated yet - use RunPod's graphql endpoint to get fresh data
+        # If empty, retry multiple times with delays (RunPod API is slow)
         if not ssh_host:
-            try:
-                # Call get_pod again (sometimes a fresh call returns updated data)
-                fresh_pod = runpod.get_pod(pod_id)
-                if fresh_pod:
-                    fresh_machine = fresh_pod.get("machine") or {}
-                    ssh_host = fresh_machine.get("podHostId", "")
-                    if ssh_host:
-                        log.info(f"✅ Found SSH host on retry: {ssh_host}")
-            except Exception as e:
-                log.debug(f"Retry failed: {e}")
+            import time
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    time.sleep(2)  # Wait 2 seconds before retry
+                    fresh_pod = runpod.get_pod(pod_id)
+                    if fresh_pod:
+                        fresh_machine = fresh_pod.get("machine") or {}
+                        ssh_host = fresh_machine.get("podHostId", "")
+                        if ssh_host:
+                            log.info(f"✅ Found SSH host on retry {attempt + 1}: {ssh_host}")
+                            break
+                        # Try alternate fields
+                        ssh_host = fresh_machine.get("id", "")
+                        if ssh_host:
+                            log.info(f"✅ Found SSH host in alternate field: {ssh_host}")
+                            break
+                except Exception as e:
+                    log.debug(f"Retry {attempt + 1} failed: {e}")
 
-        # If STILL empty after retry, provide helpful placeholder with pod ID
+        # If STILL empty after retries, provide helpful placeholder with manual instructions
         if not ssh_host:
-            log.warning(f"SSH host not available yet for pod {pod_id}")
-            # Provide RunPod dashboard URL instead
-            return f"# SSH host not available yet. Check RunPod dashboard: https://runpod.io/console/pods\n# Or wait 2-3 minutes and refresh this page"
+            log.warning(f"SSH host not available after retries for pod {pod_id}")
+            return f"""# SSH host not available yet for pod: {pod_id}
+#
+# This usually means the pod was just created. Try:
+#   1. Wait 2-3 minutes for RunPod API to update
+#   2. Click 'Refresh Pod List' button above
+#   3. Manual check: https://runpod.io/console/pods
+#
+# To get SSH host manually:
+#   - Go to RunPod dashboard
+#   - Click on your pod
+#   - Look for 'SSH over exposed TCP' section
+#   - Copy the ssh command (it will have the host)"""
 
         # Default ports: vLLM (8000), PostgreSQL (5432), Grafana (3000)
         if ports is None:

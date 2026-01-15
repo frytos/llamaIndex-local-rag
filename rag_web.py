@@ -1886,7 +1886,8 @@ def page_deployment():
             port_forwards = " ".join([f"-L {p}:localhost:{p}" for p in ports])
             ssh_cmd = f"ssh -i ~/.ssh/runpod_key -N {port_forwards} {ssh_host}@ssh.runpod.io"
         elif not ssh_host:
-            ssh_cmd = "# ERROR: SSH host not available. Click 'Refresh' button above and try again."
+            # Try to get SSH command with retries from manager
+            ssh_cmd = manager.get_ssh_command(selected_pod_id, ports=[port_options[p] for p in selected_ports])
         else:
             ssh_cmd = "# Select at least one port to forward"
 
