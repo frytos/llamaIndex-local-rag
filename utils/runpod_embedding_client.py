@@ -57,7 +57,7 @@ class RunPodEmbeddingClient:
             total=max_retries,
             backoff_factor=1,  # 1s, 2s, 4s delays
             status_forcelist=[429, 500, 502, 503, 504],
-            method_whitelist=["POST", "GET"]
+            allowed_methods=["POST", "GET"]  # Renamed from method_whitelist in urllib3 2.0+
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session.mount("http://", adapter)
