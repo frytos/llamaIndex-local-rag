@@ -1,0 +1,56 @@
+# Base image for llamaIndex-local-rag Railway deployment
+# This pre-installs all dependencies for fast rebuilds
+#
+# Build and push:
+#   docker build -f Dockerfile.base -t frytos/llamaindex-rag-base:latest .
+#   docker push frytos/llamaindex-rag-base:latest
+#
+# Then reference in Dockerfile:
+#   FROM frytos/llamaindex-rag-base:latest
+#
+# Rebuild when requirements.txt changes:
+#   docker build -f Dockerfile.base -t frytos/llamaindex-rag-base:latest .
+#   docker push frytos/llamaindex-rag-base:latest
+
+FROM python:3.13-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # PostgreSQL client libraries
+    libpq-dev \
+    libpq5 \
+    postgresql-client \
+    # Build tools for compiling Python packages
+    gcc \
+    g++ \
+    make \
+    # Utilities
+    curl \
+    wget \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements.txt
+COPY requirements.txt .
+
+# Install Python dependencies (this is the slow part - 10-15 min)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Set Python environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Create app directories
+RUN mkdir -p /app/logs /app/data /app/query_logs /app/auth
+
+# Label for tracking
+LABEL maintainer="frytos@protonmail.com"
+LABEL description="Base image for llamaIndex-local-rag with all dependencies pre-installed"
+LABEL version="1.0.0"
+
+# Default command (will be overridden by application Dockerfile)
+CMD ["python", "--version"]
