@@ -2096,6 +2096,12 @@ if authentication_status:
     authenticator.logout('Logout', 'sidebar')
     st.sidebar.write(f'Welcome *{name}*')
 
+    # Store user info in session state for access throughout app
+    if 'username' not in st.session_state:
+        st.session_state['username'] = username
+    if 'name' not in st.session_state:
+        st.session_state['name'] = name
+
     # Initialize session state for authenticated users
     init_session_state()
 
