@@ -1,0 +1,53 @@
+# Exclude from Docker build context (faster uploads, smaller images)
+
+# Virtual environments
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Data and logs (large, not needed in container)
+data/
+logs/
+benchmarks/
+query_logs/
+results/
+archive/
+
+# Development files
+.git/
+.github/
+.gitignore
+*.md
+!README.md
+CLAUDE.md
+
+# Planning documents
+.planning/
+.claude/
+
+# Local environment
+.env
+.env.local
+config/.env
+
+# Test files
+tests/
+pytest.ini
+.pytest_cache/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
