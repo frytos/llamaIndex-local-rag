@@ -116,6 +116,12 @@ click==8.3.1                      # CLI framework
 colorama==0.4.6                   # Terminal colors
 
 # ----------------------------------------------------------------------------
+# Authentication & Security
+# ----------------------------------------------------------------------------
+streamlit-authenticator>=0.3.3    # Complete authentication module with cookie/session management
+argon2-cffi>=23.1.0               # Argon2id password hashing (2026 standard, GPU-resistant)
+
+# ----------------------------------------------------------------------------
 # Validation & Serialization
 # ----------------------------------------------------------------------------
 pydantic==2.12.5                  # Data validation
