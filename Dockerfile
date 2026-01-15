@@ -1,27 +1,56 @@
-# Dockerfile for Railway deployment using pre-built base image
-# Base image (frytos/llamaindex-rag-base:latest) contains:
-#   - Python 3.13-slim
-#   - System dependencies (PostgreSQL client, gcc, g++, etc.)
-#   - ALL Python packages from requirements.txt
-#   - Pre-created directories (/app/logs, /app/data, /app/query_logs, /app/auth)
-#
-# This Dockerfile only copies application code = 30-60 second rebuilds!
-#
-# To update base image (when requirements.txt changes):
-#   ./build-base-image.sh
+# Multi-stage Dockerfile for Railway deployment (optimized for fast rebuilds)
 
-FROM frytos/llamaindex-rag-base:latest
+# =============================================================================
+# Stage 1: Base image with system dependencies
+# =============================================================================
+FROM python:3.13-slim AS base
 
-# Copy application code (this is the ONLY layer that changes)
-# .dockerignore excludes: data/, logs/, .git/, tests/, .planning/
+# Install system dependencies (PostgreSQL client libraries)
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    libpq5 \
+    postgresql-client \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# =============================================================================
+# Stage 2: Dependencies layer (HEAVILY CACHED)
+# =============================================================================
+FROM base AS dependencies
+
+# Set working directory
+WORKDIR /app
+
+# Copy ONLY requirements.txt first (this layer is cached unless requirements.txt changes)
+COPY requirements.txt .
+
+# Install Python dependencies
+# This step takes 10-15 minutes but is CACHED on subsequent builds
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# =============================================================================
+# Stage 3: Application layer (rebuilds quickly when code changes)
+# =============================================================================
+FROM dependencies AS app
+
+# Copy application code
+# This layer rebuilds when you change code, but dependencies are already installed!
 COPY . /app
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data /app/query_logs
 
 # Expose port (Railway assigns $PORT dynamically)
 EXPOSE 8080
 
-# Health check (curl is available in base image)
+# Health check (optional but recommended)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/_stcore/health || exit 1
+
+# Set environment variables defaults
+ENV PYTHONUNBUFFERED=1
 
 # Start command - use shell form to allow $PORT expansion
 # Railway sets $PORT dynamically, shell wrapper expands it at runtime
