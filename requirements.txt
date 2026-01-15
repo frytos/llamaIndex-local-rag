@@ -47,6 +47,13 @@ llama_cpp_python==0.3.16          # Local LLM inference (llama.cpp)
 runpod>=1.7.5                     # RunPod API for GPU pod management
 
 # ----------------------------------------------------------------------------
+# API Service (FastAPI for RunPod Embedding Service)
+# ----------------------------------------------------------------------------
+fastapi>=0.115.0                  # Modern web framework for embedding API
+uvicorn[standard]>=0.34.0         # ASGI server with performance optimizations
+pydantic>=2.10.0                  # Data validation (included with FastAPI)
+
+# ----------------------------------------------------------------------------
 # Embeddings & Machine Learning
 # (Used for embeddings, reranking, semantic cache, query expansion, metadata)
 # ----------------------------------------------------------------------------

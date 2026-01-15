@@ -138,7 +138,7 @@ class RunPodManager:
         image: str = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
         volume_gb: int = 100,
         container_disk_gb: int = 50,
-        ports: str = "5432/tcp,8000/http,22/tcp,3000/http",
+        ports: str = "5432/tcp,8000/http,8001/http,22/tcp,3000/http",
         env: Optional[Dict[str, str]] = None,
         docker_args: Optional[str] = None,
         template_id: Optional[str] = None

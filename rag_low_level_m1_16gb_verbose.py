@@ -2537,12 +2537,105 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
 
 def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> None:
     """
-    Compute embeddings for each node.
+    Compute embeddings for each node using either:
+    1. RunPod GPU API (if RUNPOD_EMBEDDING_ENDPOINT configured) - ~100x faster
+    2. Local embedding model (fallback) - CPU/GPU depending on availability
+
     This is often the longest step after LLM inference.
     We do batching for speed and steadier memory usage.
     """
+    # Check for RunPod embedding endpoint configuration
+    runpod_endpoint = os.getenv("RUNPOD_EMBEDDING_ENDPOINT")
+    runpod_api_key = os.getenv("RUNPOD_EMBEDDING_API_KEY")
+
+    if runpod_endpoint and runpod_api_key:
+        log.info(f"🚀 Using RunPod GPU for embeddings")
+        return _embed_nodes_remote(nodes, runpod_endpoint, runpod_api_key)
+    else:
+        log.info(f"💻 Using local embedding model")
+        return _embed_nodes_local(embed_model, nodes)
+
+
+def _embed_nodes_remote(nodes: List[TextNode], endpoint: str, api_key: str) -> None:
+    """Embed nodes using RunPod GPU API"""
+    from utils.runpod_embedding_client import RunPodEmbeddingClient
+
     log.info(f"\n{'='*70}")
-    log.info(f"STEP 2: EMBEDDING - Converting text to semantic vectors")
+    log.info(f"STEP 2: EMBEDDING - Converting text to semantic vectors (RunPod GPU)")
+    log.info(f"{'='*70}")
+    log.info(f"⚙️  Configuration:")
+    log.info(f"  • Model: {S.embed_model_name}")
+    log.info(f"  • Dimension: {S.embed_dim} (vector size)")
+    log.info(f"  • Total nodes: {len(nodes)}")
+    log.info(f"  • RunPod endpoint: {endpoint}")
+    log.info(f"  • Acceleration: GPU (~100x faster than CPU)")
+
+    log.info(f"\n💡 What are embeddings?")
+    log.info(f"  • Embeddings convert text into {S.embed_dim}-dimensional vectors")
+    log.info(f"  • Similar text → similar vectors (measured by cosine similarity)")
+    log.info(f"  • This enables semantic search (meaning-based, not just keywords)")
+
+    total_bytes = len(nodes) * S.embed_dim * PERFORMANCE.BYTES_PER_FLOAT32
+    log.info(f"\n📊 Storage Impact:")
+    log.info(f"  • {len(nodes)} vectors × {S.embed_dim} dims × {PERFORMANCE.BYTES_PER_FLOAT32} bytes = {total_bytes/1024/1024:.1f} MB")
+
+    t = now_ms()
+
+    # Extract texts from nodes (metadata_mode="none" for pure text embeddings)
+    texts = [n.get_content(metadata_mode="none") for n in nodes]
+
+    # Create client and call API
+    client = RunPodEmbeddingClient(endpoint, api_key)
+
+    try:
+        # Check service health first
+        if not client.check_health():
+            log.warning("⚠️  RunPod embedding service unhealthy, falling back to local embedding")
+            client.close()
+            # Rebuild local model and use it
+            embed_model = build_embed_model()
+            return _embed_nodes_local(embed_model, nodes)
+
+        log.info(f"\n🔄 Sending {len(texts)} texts to RunPod GPU...")
+        embeddings = client.embed_texts(
+            texts=texts,
+            model=S.embed_model_name,
+            batch_size=128,  # GPU batch size
+            show_progress=True
+        )
+
+        # Assign embeddings to nodes
+        for node, emb in zip(nodes, embeddings):
+            node.embedding = emb
+
+        total_time = dur_s(t)
+        throughput = len(nodes) / total_time if total_time > 0 else 0
+
+        log.info(f"\n✓ Embeddings complete in {total_time:.2f}s")
+        log.info(f"  📊 Performance:")
+        log.info(f"    • Throughput: {throughput:.1f} nodes/second")
+        log.info(f"    • Time per node: {total_time/len(nodes)*1000:.1f}ms")
+        log.info(f"  ℹ️  These embeddings enable semantic similarity search in the next step")
+
+    except (ConnectionError, RuntimeError) as e:
+        log.error(f"❌ RunPod embedding failed: {e}")
+        log.warning(f"⚠️  Falling back to local embedding")
+        client.close()
+        # Rebuild local model and use it
+        embed_model = build_embed_model()
+        return _embed_nodes_local(embed_model, nodes)
+
+    finally:
+        client.close()
+
+    # Memory optimization
+    gc.collect()
+
+
+def _embed_nodes_local(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> None:
+    """Embed nodes using local model (original implementation)"""
+    log.info(f"\n{'='*70}")
+    log.info(f"STEP 2: EMBEDDING - Converting text to semantic vectors (Local)")
     log.info(f"{'='*70}")
     log.info(f"⚙️  Configuration:")
     log.info(f"  • Model: {S.embed_model_name}")

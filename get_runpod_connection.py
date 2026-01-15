@@ -47,6 +47,16 @@ for i, pod in enumerate(pods, 1):
     print(f"Uptime: {uptime}s")
     print()
 
+    # Check SSH host availability
+    ssh_host = machine.get('podHostId', '')
+    if ssh_host:
+        print(f"🔐 SSH Host: {ssh_host}")
+        print(f"   Command: ssh -i ~/.ssh/runpod_key {ssh_host}@ssh.runpod.io")
+    else:
+        print(f"⚠️  SSH Host: NOT AVAILABLE")
+        print(f"   Machine data: {machine}")
+    print()
+
     # Get port mappings
     ports = runtime.get('ports', [])
 

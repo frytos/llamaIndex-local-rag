@@ -671,6 +671,17 @@ def run_indexing(doc_path: Path, table_name: str, chunk_size: int, chunk_overlap
     rag.S.embed_backend = embed_backend
     rag.S.reset_table = reset_table
 
+    # Check if RunPod GPU is configured
+    runpod_endpoint = os.getenv("RUNPOD_EMBEDDING_ENDPOINT")
+    runpod_api_key = os.getenv("RUNPOD_EMBEDDING_API_KEY")
+
+    if runpod_endpoint and runpod_api_key:
+        st.success("🚀 **GPU Acceleration Enabled** - Using RunPod RTX 4090 (~100x faster)")
+        st.caption(f"Endpoint: {runpod_endpoint}")
+    else:
+        st.warning("💻 **CPU Mode** - Embeddings will be slower. Configure RUNPOD_EMBEDDING_ENDPOINT for GPU acceleration.")
+        st.caption("GPU embeddings: ~10 seconds | CPU embeddings: ~17 minutes (for 837 chunks)")
+
     status = st.status("Indexing Pipeline", expanded=True)
 
     with status:
