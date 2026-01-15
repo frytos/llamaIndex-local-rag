@@ -349,10 +349,34 @@ class RunPodManager:
         machine = pod.get("machine") or {}
         gpu = pod.get("gpu") or {}
 
+        # Get basic status from API
+        container_state = runtime.get("containerState", "unknown")
+        uptime = runtime.get("uptimeInSeconds", 0)
+        ssh_host = machine.get("podHostId", "")
+
+        # Improve status detection: if API says "unknown" but ports are available, pod is likely running
+        ports = runtime.get("ports", [])
+        if container_state == "unknown" and ports:
+            # If we have port mappings, pod is probably running (API just hasn't updated)
+            container_state = "running"
+            log.debug(f"Pod {pod_id}: API status is 'unknown' but ports are available - treating as 'running'")
+
+        # Try to construct SSH host if not available from API
+        if not ssh_host and machine:
+            # Sometimes podHostId is in the machine dict but with a different key
+            # Or we can construct it from the pod creation response
+            ssh_host = machine.get("podHostId") or machine.get("id", "")
+
+        # If still no SSH host but we have pod ID, construct expected format
+        if not ssh_host and pod_id:
+            # RunPod SSH hosts follow pattern: {pod_id}-{random}@ssh.runpod.io
+            # We can at least provide the pod ID for manual construction
+            log.debug(f"SSH host not available from API for pod {pod_id}")
+
         status = {
             # State
-            "status": runtime.get("containerState", "unknown"),
-            "uptime_seconds": runtime.get("uptimeInSeconds", 0),
+            "status": container_state,
+            "uptime_seconds": uptime,
 
             # GPU Metrics
             "gpu_utilization": runtime.get("gpuUtilization", 0),
@@ -363,7 +387,7 @@ class RunPodManager:
             "memory_utilization": runtime.get("memoryUtilization", 0),
 
             # Connection
-            "ssh_host": machine.get("podHostId", ""),
+            "ssh_host": ssh_host,
             "ssh_port": machine.get("podPort", 22),
 
             # Cost
@@ -371,6 +395,9 @@ class RunPodManager:
 
             # Timestamps
             "last_status_change": runtime.get("lastStatusChange", ""),
+
+            # Extra: port mappings (useful for debugging)
+            "ports": ports,
         }
 
         return status
@@ -476,18 +503,24 @@ class RunPodManager:
 
         log.debug(f"SSH host from machine info: {ssh_host}")
 
-        # If still empty, try from status
+        # If empty, RunPod API hasn't updated yet - use RunPod's graphql endpoint to get fresh data
         if not ssh_host:
-            log.warning("SSH host not in machine info, trying status...")
-            status = self.get_pod_status(pod_id)
-            ssh_host = status.get("ssh_host", "")
-            log.debug(f"SSH host from status: {ssh_host}")
+            try:
+                # Call get_pod again (sometimes a fresh call returns updated data)
+                fresh_pod = runpod.get_pod(pod_id)
+                if fresh_pod:
+                    fresh_machine = fresh_pod.get("machine") or {}
+                    ssh_host = fresh_machine.get("podHostId", "")
+                    if ssh_host:
+                        log.info(f"✅ Found SSH host on retry: {ssh_host}")
+            except Exception as e:
+                log.debug(f"Retry failed: {e}")
 
-        # If still empty, can't generate command
+        # If STILL empty after retry, provide helpful placeholder with pod ID
         if not ssh_host:
-            log.error(f"SSH host not available for pod {pod_id}")
-            # Return a placeholder that's obviously wrong so user knows to check
-            return f"# ERROR: SSH host not available yet for pod {pod_id}. Refresh the page and try again."
+            log.warning(f"SSH host not available yet for pod {pod_id}")
+            # Provide RunPod dashboard URL instead
+            return f"# SSH host not available yet. Check RunPod dashboard: https://runpod.io/console/pods\n# Or wait 2-3 minutes and refresh this page"
 
         # Default ports: vLLM (8000), PostgreSQL (5432), Grafana (3000)
         if ports is None:
