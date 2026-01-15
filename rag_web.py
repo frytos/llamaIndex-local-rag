@@ -1668,12 +1668,16 @@ def page_deployment():
                 # Create pod
                 progress.progress(10, text="Creating pod on RunPod...")
 
+                # Get embedding API key from Railway environment (will be passed to pod)
+                embedding_api_key = os.getenv("RUNPOD_EMBEDDING_API_KEY", "")
+
                 custom_env = {
                     "USE_VLLM": "1",
                     "VLLM_MODEL": vllm_model,
                     "EMBED_MODEL": embed_model,
                     "CTX": str(ctx_size),
-                    "TOP_K": str(top_k)
+                    "TOP_K": str(top_k),
+                    "RUNPOD_EMBEDDING_API_KEY": embedding_api_key  # For embedding service authentication
                 }
 
                 # Build docker_args for auto-setup
@@ -1696,24 +1700,41 @@ def page_deployment():
                         "echo ========================================== && "
                         "echo && "
                         "cd /workspace && "
-                        "echo [STEP 1/4] Cloning/updating repository... && "
+                        "echo [STEP 1/5] Cloning/updating repository... && "
                         f"if [ -d rag-pipeline ]; then echo Repository exists, pulling updates...; cd rag-pipeline && git pull origin {github_branch}; else echo Cloning fresh repository...; git clone --branch {github_branch} {clone_url} rag-pipeline; fi && "
                         "echo Repository ready! && "
                         "echo && "
                         "cd /workspace/rag-pipeline && "
-                        "echo [STEP 2/4] Checking if initialization needed... && "
+                        "echo [STEP 2/5] Checking if initialization needed... && "
                         "if [ -f /workspace/.init_complete ]; then echo Already initialized, skipping init script; else echo Running initialization script...; bash scripts/init_runpod_services.sh; echo Creating completion marker...; touch /workspace/.init_complete; echo Initialization complete!; fi && "
                         "echo && "
-                        "echo [STEP 3/4] Verifying services... && "
+                        "echo [STEP 3/5] Installing embedding service dependencies... && "
+                        "pip install --quiet fastapi uvicorn[standard] requests || echo Warning: Dependency installation failed && "
+                        "echo && "
+                        "echo [STEP 4/5] Starting embedding service... && "
+                        "nohup python3 -m uvicorn services.embedding_service:app --host 0.0.0.0 --port 8001 --workers 1 > /workspace/embedding_service.log 2>&1 & "
+                        "echo Embedding service started on port 8001 && "
+                        "sleep 5 && "
+                        "curl -s http://localhost:8001/health && echo && echo Embedding service healthy! || echo Warning: Embedding service not responding yet && "
+                        "echo && "
+                        "echo [STEP 5/5] Verifying services... && "
                         "service postgresql status || echo PostgreSQL not running && "
                         "curl -s http://localhost:8000/health || echo vLLM not ready yet && "
+                        "curl -s http://localhost:8001/health || echo Embedding API not ready yet && "
                         "echo && "
-                        "echo [STEP 4/4] Starting container keepalive... && "
                         "echo ========================================== && "
                         "echo AUTO-SETUP COMPLETE: $(date) && "
                         "echo ========================================== && "
                         "echo Pod is ready for use! && "
-                        "echo Logs: /workspace/startup.log && "
+                        "echo && "
+                        "echo Services: && "
+                        "echo - PostgreSQL: port 5432 && "
+                        "echo - vLLM: port 8000 && "
+                        "echo - Embedding API: port 8001 && "
+                        "echo && "
+                        "echo Logs: && "
+                        "echo - Startup: /workspace/startup.log && "
+                        "echo - Embedding: /workspace/embedding_service.log && "
                         "echo && "
                         "exec sleep infinity"
                         "'"
