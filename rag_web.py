@@ -29,6 +29,7 @@ else:
         load_dotenv(config_env)
 
 import streamlit as st
+from auth.authenticator import load_authenticator
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -148,8 +149,6 @@ def init_session_state():
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
-
-init_session_state()
 
 # =============================================================================
 # Database Utilities
@@ -2081,5 +2080,32 @@ def main():
     elif page == "☁️ RunPod Deployment":
         page_deployment()
 
-if __name__ == "__main__":
+# =============================================================================
+# Authentication & Main Execution
+# =============================================================================
+
+# Initialize authenticator
+authenticator = load_authenticator()
+
+# Render login widget
+name, authentication_status, username = authenticator.login('main')
+
+# Handle authentication states
+if authentication_status:
+    # User authenticated - show logout in sidebar
+    authenticator.logout('Logout', 'sidebar')
+    st.sidebar.write(f'Welcome *{name}*')
+
+    # Initialize session state for authenticated users
+    init_session_state()
+
+    # Call main to render the app
     main()
+
+elif authentication_status is False:
+    st.error('Username/password is incorrect')
+    st.stop()
+
+elif authentication_status is None:
+    st.warning('Please enter your username and password')
+    st.stop()
