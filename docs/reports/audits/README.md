@@ -44,6 +44,36 @@ To create a shareable version of a report:
 
 2. **Use the `_REDACTED.md` suffix** - These are allowed in git (see .gitignore)
 
+## 🌐 Interactive Dashboard
+
+**NEW:** Beautiful web-based dashboard with markdown rendering!
+
+### Quick Start
+
+```bash
+# Option 1: Use the helper script (auto-finds available port)
+./serve.sh
+
+# Option 2: Manual start
+python3 -m http.server 8888
+```
+
+Then open: **http://localhost:8888/index.html** (or whichever port the script chose)
+
+### Features
+
+✨ **Dynamic Markdown Rendering** - All `.md` reports display as styled HTML
+📊 **Interactive Charts** - Visual dimension scores and performance metrics
+🎨 **Dark Theme** - Professional GitHub-inspired design
+📱 **Responsive** - Works on desktop, tablet, and mobile
+⌨️ **Keyboard Shortcuts** - `Esc` (back), `Ctrl+P` (print), `?` (help)
+🔍 **Table of Contents** - Auto-generated for easy navigation
+🖨️ **Print/PDF Export** - Save any report as PDF
+
+### Why Use Local Server?
+
+**Important:** The dashboard must be served via HTTP (not opened as `file://`) due to browser CORS security policies. The Python server is the simplest solution.
+
 ## Current Reports
 
 ### Generated: January 15, 2026
@@ -57,7 +87,7 @@ To create a shareable version of a report:
 - 📊 `EXECUTIVE_SUMMARY.md` - Business overview, scores, ROI
 - 🔴 `RISK_PRIORITY_MATRIX.md` - Prioritized action items
 - 🔬 `TECHNICAL_DEEP_DIVE.md` - Detailed technical findings
-- 🌐 `index.html` - Interactive dark mode dashboard
+- 🌐 `index.html` - **Interactive dark mode dashboard** ⭐
 
 **Specialized Reports:**
 - 🔍 `DEBUGGABILITY_OBSERVABILITY_ASSESSMENT.md` (1,200+ lines)
