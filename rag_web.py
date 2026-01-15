@@ -2087,20 +2087,23 @@ def main():
 # Initialize authenticator
 authenticator = load_authenticator()
 
-# Render login widget
-name, authentication_status, username = authenticator.login('main')
+# Render login widget (stores results in st.session_state)
+try:
+    authenticator.login()
+except Exception as e:
+    st.error(f"Authentication error: {e}")
+    st.stop()
+
+# Get authentication status from session state
+authentication_status = st.session_state.get('authentication_status')
+name = st.session_state.get('name')
+username = st.session_state.get('username')
 
 # Handle authentication states
 if authentication_status:
     # User authenticated - show logout in sidebar
     authenticator.logout('Logout', 'sidebar')
     st.sidebar.write(f'Welcome *{name}*')
-
-    # Store user info in session state for access throughout app
-    if 'username' not in st.session_state:
-        st.session_state['username'] = username
-    if 'name' not in st.session_state:
-        st.session_state['name'] = name
 
     # Initialize session state for authenticated users
     init_session_state()
