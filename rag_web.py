@@ -532,6 +532,9 @@ def page_index():
     options = []
     option_paths = {}
 
+    # Add upload option first
+    options.append("📤 Upload files from your computer")
+
     for folder, count in folders:
         label = f"📁 {folder.name}/ ({count} files)"
         options.append(label)
@@ -547,7 +550,47 @@ def page_index():
 
     selected = st.selectbox("Available documents:", options)
 
-    if selected == "📝 Enter custom path":
+    doc_path = None
+
+    if selected == "📤 Upload files from your computer":
+        st.info("📁 Drag and drop files here, or click to browse")
+
+        uploaded_files = st.file_uploader(
+            "Choose files to index",
+            accept_multiple_files=True,
+            type=["pdf", "txt", "html", "md", "py", "js", "json", "csv"],
+            help="Supported: PDF, TXT, HTML, MD, PY, JS, JSON, CSV"
+        )
+
+        if uploaded_files:
+            # Create temporary upload directory
+            import tempfile
+            upload_dir = Path(tempfile.gettempdir()) / "streamlit_uploads" / f"upload_{int(time.time())}"
+            upload_dir.mkdir(parents=True, exist_ok=True)
+
+            # Save uploaded files
+            saved_files = []
+            total_size = 0
+            for uploaded_file in uploaded_files:
+                file_path = upload_dir / uploaded_file.name
+                file_path.write_bytes(uploaded_file.read())
+                saved_files.append(file_path)
+                total_size += file_path.stat().st_size
+
+            st.success(f"✅ Uploaded {len(saved_files)} file(s) ({total_size / (1024*1024):.1f} MB)")
+
+            # Show uploaded files
+            with st.expander("📋 Uploaded files"):
+                for f in saved_files:
+                    st.text(f"• {f.name} ({f.stat().st_size / 1024:.1f} KB)")
+
+            # Use upload directory as doc_path
+            doc_path = upload_dir
+        else:
+            st.warning("Please upload at least one file")
+            return
+
+    elif selected == "📝 Enter custom path":
         doc_path = st.text_input("Enter path:", value=str(DATA_DIR))
         doc_path = Path(doc_path) if doc_path else None
     else:
@@ -557,7 +600,8 @@ def page_index():
         st.warning("Please select a valid document or folder")
         return
 
-    st.success(f"Selected: `{doc_path}`")
+    if selected != "📤 Upload files from your computer":
+        st.success(f"Selected: `{doc_path}`")
 
     # Chunking Parameters
     st.subheader("2. Chunking Parameters")
