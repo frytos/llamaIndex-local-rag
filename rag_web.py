@@ -1473,9 +1473,9 @@ def page_deployment():
 
         if enable_auto_setup:
             # Get defaults from environment variables
-            default_repo = os.getenv("GITHUB_REPO_URL", "https://github.com/YOUR_USERNAME/llamaIndex-local-rag.git")
+            default_repo = os.getenv("GITHUB_REPO_URL", "https://github.com/frytos/llamaIndex-local-rag.git")
             default_branch = os.getenv("GITHUB_BRANCH", "main")
-            default_use_token = os.getenv("USE_GITHUB_TOKEN", "0") == "1"
+            default_use_token = os.getenv("USE_GITHUB_TOKEN", "1") == "1"
 
             github_repo = st.text_input(
                 "GitHub Repository URL",
