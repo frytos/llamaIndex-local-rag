@@ -8,10 +8,14 @@ Launch with: streamlit run rag_web.py
 import os
 import sys
 import time
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 import pandas as pd
+
+# Set up logging
+log = logging.getLogger(__name__)
 
 # Add the project root to path for imports
 PROJECT_ROOT = Path(__file__).parent
