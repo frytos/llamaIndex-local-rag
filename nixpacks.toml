@@ -1,8 +1,8 @@
 [phases.setup]
-nixPkgs = ["python313", "postgresql"]
+nixPkgs = ["python313", "python313Packages.pip", "postgresql"]
 
 [phases.install]
-cmds = ["python3 -m pip install --upgrade pip", "python3 -m pip install -r requirements.txt"]
+cmds = ["pip install --upgrade pip", "pip install -r requirements.txt"]
 
 [start]
 cmd = "streamlit run rag_web.py --server.port=$PORT --server.address=0.0.0.0"
