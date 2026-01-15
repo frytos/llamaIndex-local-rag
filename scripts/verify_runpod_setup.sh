@@ -38,7 +38,7 @@ echo ""
 # 4. Test User Connection
 # ==========================================
 echo "👤 [4/6] Testing user connection..."
-export PGPASSWORD=frytos
+export PGPASSWORD=${PGPASSWORD:?Error: PGPASSWORD not set}
 psql -h localhost -U fryt -d vector_db -c "SELECT extname, extversion FROM pg_extension WHERE extname='vector';" 2>&1
 echo "  ✅ User connection works"
 echo ""

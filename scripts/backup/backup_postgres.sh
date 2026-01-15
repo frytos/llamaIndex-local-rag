@@ -36,7 +36,7 @@ fi
 PGHOST="${PGHOST:-localhost}"
 PGPORT="${PGPORT:-5432}"
 PGUSER="${PGUSER:-fryt}"
-PGPASSWORD="${PGPASSWORD:-frytos}"
+PGPASSWORD="${PGPASSWORD:?Error: PGPASSWORD environment variable must be set. Please set it in .env file}"
 DB_NAME="${DB_NAME:-vector_db}"
 
 # Backup filename with timestamp

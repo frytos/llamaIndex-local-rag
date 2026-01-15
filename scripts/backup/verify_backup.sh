@@ -20,7 +20,7 @@ fi
 PGHOST="${PGHOST:-localhost}"
 PGPORT="${PGPORT:-5432}"
 PGUSER="${PGUSER:-fryt}"
-PGPASSWORD="${PGPASSWORD:-frytos}"
+PGPASSWORD="${PGPASSWORD:?Error: PGPASSWORD must be set in .env}}"
 
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"

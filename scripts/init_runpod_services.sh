@@ -214,7 +214,7 @@ fi
 
 # Create database and user
 log_info "Setting up database..."
-su - postgres -c "psql -c \"CREATE USER fryt WITH PASSWORD 'frytos';\"" 2>/dev/null || true
+su - postgres -c "psql -c \"CREATE USER fryt WITH PASSWORD '${PGPASSWORD:-frytos_INSECURE_DEFAULT}';\"" 2>/dev/null || true
 su - postgres -c "psql -c \"CREATE DATABASE vector_db OWNER fryt;\"" 2>/dev/null || true
 su - postgres -c "psql -d vector_db -c \"CREATE EXTENSION IF NOT EXISTS vector;\"" 2>/dev/null || true
 su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE vector_db TO fryt;\"" 2>/dev/null || true

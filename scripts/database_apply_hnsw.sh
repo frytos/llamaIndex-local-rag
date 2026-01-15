@@ -16,7 +16,7 @@ PGTABLE=${1:-inbox_clean}
 PGHOST=${PGHOST:-localhost}
 PGPORT=${PGPORT:-5432}
 PGUSER=${PGUSER:-fryt}
-PGPASSWORD=${PGPASSWORD:-frytos}
+PGPASSWORD=${PGPASSWORD:?Error: PGPASSWORD must be set in .env}}
 DB_NAME=${DB_NAME:-vector_db}
 
 echo "========================================================================"

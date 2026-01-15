@@ -106,7 +106,7 @@ reindex_mlx_full() {
     fi
 
     echo -e "${GREEN}Creating backup...${NC}"
-    PGPASSWORD=frytos psql -h localhost -U fryt -d vector_db -c \
+    PGPASSWORD=${PGPASSWORD:?Error: PGPASSWORD not set} psql -h localhost -U fryt -d vector_db -c \
         "CREATE TABLE inbox_clean_backup AS SELECT * FROM inbox_clean;"
 
     echo -e "${GREEN}Re-indexing with MLX...${NC}"

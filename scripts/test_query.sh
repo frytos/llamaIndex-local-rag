@@ -10,7 +10,7 @@ echo ""
 
 # Check database is running
 echo "1️⃣  Checking database connection..."
-if PGPASSWORD=frytos psql -h localhost -U fryt -d vector_db -c "SELECT 1;" > /dev/null 2>&1; then
+if PGPASSWORD=${PGPASSWORD:?Error: PGPASSWORD not set} psql -h localhost -U fryt -d vector_db -c "SELECT 1;" > /dev/null 2>&1; then
     echo "   ✅ Database connected"
 else
     echo "   ❌ Database not running!"
@@ -21,7 +21,7 @@ fi
 # Check tables
 echo ""
 echo "2️⃣  Checking available indexes..."
-PGPASSWORD=frytos psql -h localhost -U fryt -d vector_db -t -c "
+PGPASSWORD=${PGPASSWORD:?Error: PGPASSWORD not set} psql -h localhost -U fryt -d vector_db -t -c "
 SELECT
     table_name || ': ' || COUNT(*) || ' chunks'
 FROM information_schema.tables t,
@@ -41,7 +41,7 @@ done
 echo ""
 echo "3️⃣  Testing query on data_messages-text-slim_fast_1883_260108..."
 
-count=$(PGPASSWORD=frytos psql -h localhost -U fryt -d vector_db -t -A -c "
+count=$(PGPASSWORD=${PGPASSWORD:?Error: PGPASSWORD not set} psql -h localhost -U fryt -d vector_db -t -A -c "
 SELECT COUNT(*) FROM \"data_messages-text-slim_fast_1883_260108\" WHERE LOWER(text) LIKE '%agathe%';
 ")
 
@@ -57,7 +57,7 @@ fi
 echo ""
 echo "4️⃣  Testing vector similarity search..."
 
-result=$(PGPASSWORD=frytos psql -h localhost -U fryt -d vector_db -t -A -c "
+result=$(PGPASSWORD=${PGPASSWORD:?Error: PGPASSWORD not set} psql -h localhost -U fryt -d vector_db -t -A -c "
 WITH sample AS (
     SELECT embedding FROM \"data_messages-text-slim_fast_1883_260108\"
     WHERE LOWER(text) LIKE '%agathe%' LIMIT 1

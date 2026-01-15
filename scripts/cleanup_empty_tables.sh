@@ -2,7 +2,7 @@
 # Cleanup script to remove all empty vector tables
 # Usage: ./cleanup_empty_tables.sh
 
-PGPASSWORD=frytos psql -h localhost -U fryt -d vector_db << 'EOF'
+PGPASSWORD=${PGPASSWORD:?Error: PGPASSWORD not set} psql -h localhost -U fryt -d vector_db << 'EOF'
 DO $$
 DECLARE
     tbl TEXT;
@@ -51,7 +51,7 @@ echo ""
 echo "✅ Cleanup complete!"
 echo ""
 echo "Remaining tables:"
-PGPASSWORD=frytos psql -h localhost -U fryt -d vector_db -t -c "
+PGPASSWORD=${PGPASSWORD:?Error: PGPASSWORD not set} psql -h localhost -U fryt -d vector_db -t -c "
 SELECT table_name || ': ' || (SELECT COUNT(*) FROM pg_class WHERE relname = table_name) || ' exists'
 FROM information_schema.tables
 WHERE table_schema = 'public'

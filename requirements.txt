@@ -72,7 +72,7 @@ asyncpg==0.31.0                   # Async PostgreSQL
 # Document Processing
 # ----------------------------------------------------------------------------
 PyMuPDF==1.26.7                   # PDF processing
-pypdf==6.4.2                      # Alternative PDF parser
+pypdf==6.6.0                      # Alternative PDF parser (upgraded for CVE fixes)
 python-docx==1.2.0                # Word document support
 beautifulsoup4==4.14.3            # HTML parsing
 lxml==6.0.2                       # XML/HTML parser
@@ -99,12 +99,12 @@ openai==2.13.0                    # OpenAI API client
 requests==2.32.5                  # HTTP library
 httpx==0.28.1                     # Modern HTTP client
 httpcore==1.0.9                   # HTTP core
-aiohttp==3.13.2                   # Async HTTP
+aiohttp==3.13.3                   # Async HTTP
 aiohappyeyeballs==2.6.1           # Fast async DNS
 aiosignal==1.4.0                  # Async signals
 aiosqlite==0.22.0                 # Async SQLite
 certifi==2025.11.12               # SSL certificates
-urllib3==2.6.2                    # HTTP client
+urllib3==2.6.3                    # HTTP client
 idna==3.11                        # IDNA encoding
 
 # ----------------------------------------------------------------------------
@@ -120,7 +120,7 @@ colorama==0.4.6                   # Terminal colors
 # ----------------------------------------------------------------------------
 pydantic==2.12.5                  # Data validation
 pydantic_core==2.41.5             # Pydantic core
-marshmallow==3.26.1               # Serialization
+marshmallow==3.26.2               # Serialization
 dataclasses-json==0.6.7           # Dataclass JSON support
 dirtyjson==1.0.8                  # Lenient JSON parser
 
@@ -128,7 +128,7 @@ dirtyjson==1.0.8                  # Lenient JSON parser
 # Caching & Storage
 # ----------------------------------------------------------------------------
 diskcache==5.6.3                  # Disk-based cache
-filelock==3.20.1                  # File locking
+filelock==3.20.3                  # File locking
 
 # ----------------------------------------------------------------------------
 # Monitoring & Utilities

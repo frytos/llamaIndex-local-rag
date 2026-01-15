@@ -83,7 +83,7 @@ if [[ $setup_postgres =~ ^[Yy]$ ]]; then
 
     echo "  Creating database..."
     sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME:-vector_db};" 2>/dev/null || echo "  Database already exists"
-    sudo -u postgres psql -c "CREATE USER ${PGUSER:-fryt} WITH PASSWORD '${PGPASSWORD:-frytos}';" 2>/dev/null || echo "  User already exists"
+    sudo -u postgres psql -c "CREATE USER ${PGUSER:-fryt} WITH PASSWORD '${PGPASSWORD:?Error: PGPASSWORD must be set in .env}}';" 2>/dev/null || echo "  User already exists"
     sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME:-vector_db} TO ${PGUSER:-fryt};"
 
     echo "  Installing pgvector extension..."

@@ -42,7 +42,7 @@ export ENABLE_FILTERS=1             # Enable metadata filtering
 export PGHOST=localhost
 export PGPORT=5432
 export PGUSER=fryt
-export PGPASSWORD=frytos
+export PGPASSWORD=${PGPASSWORD:?Error: PGPASSWORD not set}
 export DB_NAME=vector_db
 export PGTABLE=data_messages_text_cs700_ov150
 

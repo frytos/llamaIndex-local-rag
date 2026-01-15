@@ -142,7 +142,7 @@ Set in `.env` file or export:
 PGHOST=localhost
 PGPORT=5432
 PGUSER=fryt
-PGPASSWORD=frytos
+PGPASSWORD=your_secure_password_here
 DB_NAME=vector_db
 
 # Backup settings
