@@ -2538,14 +2538,16 @@ def build_nodes(docs: List[Any], chunks: List[str], doc_idxs: List[int]) -> List
 def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> None:
     """
     Compute embeddings for each node using either:
-    1. RunPod GPU API (if RUNPOD_EMBEDDING_ENDPOINT configured) - ~100x faster
+    1. RunPod GPU API (auto-detected or configured) - ~100x faster
     2. Local embedding model (fallback) - CPU/GPU depending on availability
 
     This is often the longest step after LLM inference.
     We do batching for speed and steadier memory usage.
     """
-    # Check for RunPod embedding endpoint configuration
-    runpod_endpoint = os.getenv("RUNPOD_EMBEDDING_ENDPOINT")
+    # Auto-detect embedding endpoint from RunPod API
+    from utils.runpod_db_config import get_embedding_endpoint
+
+    runpod_endpoint = get_embedding_endpoint()
     runpod_api_key = os.getenv("RUNPOD_EMBEDDING_API_KEY")
 
     if runpod_endpoint and runpod_api_key:
