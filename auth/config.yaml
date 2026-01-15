@@ -1,0 +1,13 @@
+credentials:
+  usernames:
+    admin:
+      email: admin@example.com
+      failed_login_attempts: 0
+      first_name: Admin
+      last_name: User
+      logged_in: False
+      password: change_me_on_first_login
+cookie:
+  expiry_days: 30
+  key: PLACEHOLDER_WILL_BE_REPLACED
+  name: rag_auth_cookie

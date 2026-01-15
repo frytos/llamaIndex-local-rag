@@ -34,6 +34,7 @@ MANIFEST
 *.pem
 *.key
 *.crt
+auth/config.yaml
 
 # Virtual Environment
 env/
