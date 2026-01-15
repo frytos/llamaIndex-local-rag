@@ -3,11 +3,24 @@
 Test PGVectorStore directly to isolate the issue.
 """
 
+import sys
 import os
 from pathlib import Path
+from unittest.mock import MagicMock
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
+
+# Mock llama_index modules before importing
+sys.modules['llama_index'] = MagicMock()
+sys.modules['llama_index.core'] = MagicMock()
+sys.modules['llama_index.core.vector_stores'] = MagicMock()
+sys.modules['llama_index.core.vector_stores.types'] = MagicMock()
+sys.modules['llama_index.vector_stores'] = MagicMock()
+sys.modules['llama_index.vector_stores.postgres'] = MagicMock()
+
+# Mock sentence_transformers
+sys.modules['sentence_transformers'] = MagicMock()
 
 from llama_index.vector_stores.postgres import PGVectorStore
 from llama_index.core.vector_stores.types import VectorStoreQuery

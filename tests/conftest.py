@@ -704,3 +704,430 @@ def create_test_index(
 
     vector_store.add(nodes)
     return nodes
+
+
+# ============================================================================
+# vLLM Fixtures (Week 1 - Day 1)
+# ============================================================================
+
+
+@pytest.fixture
+def mock_vllm_server():
+    """Mock vLLM server with health endpoint.
+
+    Returns:
+        MagicMock object simulating vLLM server
+
+    Example:
+        def test_vllm_connection(mock_vllm_server):
+            assert mock_vllm_server.is_healthy
+    """
+    mock_server = MagicMock()
+    mock_server.base_url = "http://localhost:8000/v1"
+    mock_server.health_url = "http://localhost:8000/health"
+    mock_server.is_healthy = True
+    mock_server.model_name = "TheBloke/Mistral-7B-Instruct-v0.2-AWQ"
+    return mock_server
+
+
+@pytest.fixture
+def mock_vllm_response():
+    """Create mock vLLM API response.
+
+    Returns:
+        Callable that creates mock OpenAI-compatible responses
+
+    Example:
+        def test_vllm_generation(mock_vllm_response):
+            response = mock_vllm_response(text="Test response")
+            assert response.choices[0].message.content == "Test response"
+    """
+    def _create_response(text="Mock vLLM response", finish_reason="stop"):
+        """Create a mock response object.
+
+        Args:
+            text: Response text content
+            finish_reason: Completion finish reason
+
+        Returns:
+            MagicMock simulating OpenAI response
+        """
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        response.choices[0].message = MagicMock()
+        response.choices[0].message.content = text
+        response.choices[0].finish_reason = finish_reason
+        return response
+
+    return _create_response
+
+
+@pytest.fixture
+def mock_vllm_health_check():
+    """Mock requests response for vLLM health check.
+
+    Returns:
+        MagicMock simulating requests.Response
+
+    Example:
+        with patch('requests.get', return_value=mock_vllm_health_check):
+            # Health check will succeed
+    """
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"status": "ok"}
+    return mock_response
+
+
+# ============================================================================
+# File Validator Fixtures (Week 1 - Day 2)
+# ============================================================================
+
+
+@pytest.fixture
+def sample_files(tmp_path):
+    """Create sample files with correct/incorrect extensions.
+
+    Returns:
+        Dict mapping file types to Path objects
+
+    Example:
+        def test_validation(sample_files):
+            pdf = sample_files['pdf_correct']
+            assert pdf.exists()
+    """
+    files = {}
+
+    # Real PDF with correct extension
+    pdf_correct = tmp_path / "document.pdf"
+    pdf_correct.write_bytes(b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\nReal PDF content")
+    files['pdf_correct'] = pdf_correct
+
+    # JPEG with .pdf extension (misnamed)
+    jpeg_as_pdf = tmp_path / "image.pdf"
+    jpeg_as_pdf.write_bytes(b"\xFF\xD8\xFF\xE0\x00\x10JFIF")
+    files['jpeg_as_pdf'] = jpeg_as_pdf
+
+    # PNG with correct extension
+    png_correct = tmp_path / "photo.png"
+    png_correct.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+    files['png_correct'] = png_correct
+
+    # GIF with correct extension
+    gif_correct = tmp_path / "animation.gif"
+    gif_correct.write_bytes(b"GIF89a\x01\x00\x01\x00")
+    files['gif_correct'] = gif_correct
+
+    # ZIP/DOCX with correct extension
+    docx_correct = tmp_path / "document.docx"
+    docx_correct.write_bytes(b"PK\x03\x04\x14\x00\x00\x00")
+    files['docx_correct'] = docx_correct
+
+    # Empty file
+    empty_file = tmp_path / "empty.txt"
+    empty_file.write_bytes(b"")
+    files['empty'] = empty_file
+
+    # Unknown file type
+    unknown_file = tmp_path / "data.bin"
+    unknown_file.write_bytes(b"\x00\x01\x02\x03\x04\x05")
+    files['unknown'] = unknown_file
+
+    return files
+
+
+@pytest.fixture
+def corrupted_pdf(tmp_path):
+    """Create a corrupted PDF file.
+
+    Returns:
+        Path to corrupted PDF
+
+    Example:
+        def test_corrupted(corrupted_pdf):
+            # Should handle gracefully
+            detect_file_type(corrupted_pdf)
+    """
+    pdf_file = tmp_path / "corrupted.pdf"
+    pdf_file.write_bytes(b"%PDF-1.4\n%\x00\x00\x00corrupt data")
+    return pdf_file
+
+
+@pytest.fixture
+def test_directory_with_misnamed_files(tmp_path):
+    """Create a test directory with correctly and incorrectly named files.
+
+    Returns:
+        Tuple of (directory_path, expected_misnamed_count)
+
+    Example:
+        def test_scan(test_directory_with_misnamed_files):
+            dir_path, expected_count = test_directory_with_misnamed_files
+            misnamed = scan_directory_for_misnamed_files(dir_path)
+            assert len(misnamed) == expected_count
+    """
+    test_dir = tmp_path / "test_files"
+    test_dir.mkdir()
+
+    # Correct files
+    (test_dir / "doc1.pdf").write_bytes(b"%PDF-1.4\nContent")
+    (test_dir / "image1.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (test_dir / "photo.jpg").write_bytes(b"\xFF\xD8\xFF\xE0JFIF")
+
+    # Misnamed files (2 total)
+    (test_dir / "fake_pdf.pdf").write_bytes(b"\xFF\xD8\xFF\xE0JFIF")  # JPEG as PDF
+    (test_dir / "fake_image.png").write_bytes(b"%PDF-1.4\n")  # PDF as PNG
+
+    # Create subdirectory with more files
+    subdir = test_dir / "subfolder"
+    subdir.mkdir()
+    (subdir / "nested.pdf").write_bytes(b"%PDF-1.4\n")  # Correct
+    (subdir / "wrong.jpg").write_bytes(b"\x89PNG\r\n\x1a\n")  # PNG as JPEG (1 more misnamed)
+
+    return test_dir, 3  # Total of 3 misnamed files
+
+
+# ============================================================================
+# Health Check Fixtures (Week 1 - Day 3)
+# ============================================================================
+
+
+@pytest.fixture
+def mock_psutil():
+    """Mock psutil for system resource checks.
+
+    Returns:
+        MagicMock simulating psutil module with CPU, memory, disk methods
+
+    Example:
+        def test_resources(mock_psutil):
+            assert mock_psutil.cpu_percent.return_value == 50.0
+    """
+    with patch('utils.health_check.psutil') as mock:
+        # CPU
+        mock.cpu_percent.return_value = 50.0
+
+        # Memory
+        mock_memory = MagicMock()
+        mock_memory.percent = 60.0
+        mock_memory.available = 8 * 1024**3  # 8GB
+        mock.virtual_memory.return_value = mock_memory
+
+        # Disk
+        mock_disk = MagicMock()
+        mock_disk.percent = 70.0
+        mock_disk.free = 50 * 1024**3  # 50GB
+        mock.disk_usage.return_value = mock_disk
+
+        # Boot time
+        mock.boot_time.return_value = 1000000000.0
+
+        yield mock
+
+
+@pytest.fixture
+def mock_db_connection_success():
+    """Mock successful PostgreSQL connection.
+
+    Returns:
+        MagicMock simulating psycopg2 connection
+
+    Example:
+        with patch('psycopg2.connect', return_value=mock_db_connection_success):
+            # Database check will succeed
+    """
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+
+    # Mock cursor methods
+    mock_cursor.fetchone.side_effect = [
+        ("PostgreSQL 15.0",),  # version
+        ("vector",),           # pgvector extension
+        (5,),                  # table count
+        ("100 MB",),           # database size
+    ]
+
+    mock_conn.cursor.return_value = mock_cursor
+    return mock_conn
+
+
+@pytest.fixture
+def mock_torch_cuda():
+    """Mock torch with CUDA available.
+
+    Returns:
+        MagicMock simulating torch module with CUDA
+
+    Example:
+        with patch('utils.health_check.torch', mock_torch_cuda):
+            # GPU check will detect CUDA
+    """
+    mock_torch = MagicMock()
+    mock_torch.cuda.is_available.return_value = True
+    mock_torch.cuda.device_count.return_value = 1
+    mock_torch.cuda.get_device_name.return_value = "NVIDIA RTX 4090"
+    mock_torch.version.cuda = "12.1"
+    mock_torch.backends.mps.is_available.return_value = False
+    return mock_torch
+
+
+@pytest.fixture
+def mock_torch_mps():
+    """Mock torch with MPS (Apple Silicon) available.
+
+    Returns:
+        MagicMock simulating torch module with MPS
+
+    Example:
+        with patch('utils.health_check.torch', mock_torch_mps):
+            # GPU check will detect MPS
+    """
+    mock_torch = MagicMock()
+    mock_torch.cuda.is_available.return_value = False
+    mock_torch.cuda.device_count.return_value = 0
+    mock_torch.backends.mps.is_available.return_value = True
+    return mock_torch
+
+
+# ============================================================================
+# Query Cache Fixtures (Week 1 - Day 4)
+# ============================================================================
+
+
+@pytest.fixture
+def query_cache_dir(tmp_path):
+    """Create temporary directory for query cache.
+
+    Returns:
+        Path to temporary cache directory
+
+    Example:
+        def test_cache(query_cache_dir):
+            cache = QueryCache(cache_dir=query_cache_dir)
+            # Cache isolated to test directory
+    """
+    cache_dir = tmp_path / "query_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+@pytest.fixture
+def semantic_cache_dir(tmp_path):
+    """Create temporary directory for semantic query cache.
+
+    Returns:
+        Path to temporary semantic cache directory
+
+    Example:
+        def test_semantic_cache(semantic_cache_dir):
+            cache = SemanticQueryCache(cache_dir=semantic_cache_dir)
+            # Cache isolated to test directory
+    """
+    cache_dir = tmp_path / "semantic_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+@pytest.fixture
+def sample_embeddings():
+    """Generate sample embedding vectors for cache testing.
+
+    Returns:
+        Dict with pre-generated embeddings
+
+    Example:
+        def test_similarity(sample_embeddings):
+            emb1 = sample_embeddings['query1']
+            emb2 = sample_embeddings['similar']
+            # Test similarity matching
+    """
+    import numpy as np
+
+    # Create deterministic embeddings for testing
+    np.random.seed(42)
+
+    # Base query embedding
+    query1 = np.random.randn(384)
+    query1 = query1 / np.linalg.norm(query1)  # Normalize
+
+    # Very similar query (99% similarity)
+    similar = query1 + np.random.randn(384) * 0.01
+    similar = similar / np.linalg.norm(similar)
+
+    # Somewhat similar query (~85% similarity)
+    somewhat_similar = query1 + np.random.randn(384) * 0.3
+    somewhat_similar = somewhat_similar / np.linalg.norm(somewhat_similar)
+
+    # Completely different query
+    different = np.random.randn(384)
+    different = different / np.linalg.norm(different)
+
+    return {
+        'query1': query1.tolist(),
+        'similar': similar.tolist(),
+        'somewhat_similar': somewhat_similar.tolist(),
+        'different': different.tolist(),
+    }
+
+
+# ============================================================================
+# MLX Embedding Fixtures (Week 1 - Day 5)
+# ============================================================================
+
+
+@pytest.fixture
+def mock_mlx_model():
+    """Mock MLX EmbeddingModel for testing.
+
+    Returns:
+        MagicMock simulating mlx-embedding-models EmbeddingModel
+
+    Example:
+        def test_mlx(mock_mlx_model):
+            mock_mlx_model.encode.return_value = [[0.1] * 1024]
+    """
+    import numpy as np
+
+    mock_model = MagicMock()
+
+    # Mock encode to return valid embeddings
+    def mock_encode(texts, show_progress=False):
+        """Mock encode that returns embeddings based on input."""
+        if not texts:
+            return []
+
+        # Return deterministic embeddings
+        result = []
+        for text in texts:
+            if not text or not text.strip():
+                # Empty text - model would still return embedding
+                emb = np.random.randn(1024)
+            else:
+                # Use text hash for deterministic embeddings
+                seed = hash(text) % 1000000
+                np.random.seed(seed)
+                emb = np.random.randn(1024)
+
+            # Normalize
+            emb = emb / np.linalg.norm(emb)
+            result.append(emb)
+
+        return result
+
+    mock_model.encode.side_effect = mock_encode
+    return mock_model
+
+
+@pytest.fixture
+def mock_mlx_embedding_model_class():
+    """Mock MLX EmbeddingModel.from_registry class method.
+
+    Returns:
+        MagicMock for patching EmbeddingModel.from_registry
+
+    Example:
+        with patch('mlx_embedding_models.embedding.EmbeddingModel.from_registry',
+                   return_value=mock_mlx_model):
+            # MLXEmbedding will use mock model
+    """
+    return MagicMock()

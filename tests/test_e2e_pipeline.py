@@ -23,6 +23,43 @@ os.environ.setdefault("DB_NAME", "test_db")
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Mock llama_index modules before importing
+sys.modules['llama_index'] = MagicMock()
+sys.modules['llama_index.core'] = MagicMock()
+sys.modules['llama_index.core.schema'] = MagicMock()
+
+# Create mock classes that can be instantiated
+class MockTextNode:
+    def __init__(self, text="", embedding=None, metadata=None, **kwargs):
+        self.text = text
+        self.embedding = embedding or []
+        self.metadata = metadata or {}
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+class MockNodeWithScore:
+    def __init__(self, node=None, score=0.0):
+        self.node = node or MockTextNode()
+        self.score = score
+
+class MockDocument:
+    def __init__(self, text="", metadata=None, **kwargs):
+        self.text = text
+        self.metadata = metadata or {}
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+class MockQueryBundle:
+    def __init__(self, query_str="", embedding=None):
+        self.query_str = query_str
+        self.embedding = embedding or []
+
+# Assign mock classes to the mocked modules
+sys.modules['llama_index.core.schema'].TextNode = MockTextNode
+sys.modules['llama_index.core.schema'].NodeWithScore = MockNodeWithScore
+sys.modules['llama_index.core.schema'].Document = MockDocument
+sys.modules['llama_index.core'].QueryBundle = MockQueryBundle
+
 from llama_index.core.schema import TextNode, NodeWithScore, Document
 from llama_index.core import QueryBundle
 

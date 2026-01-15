@@ -7,6 +7,35 @@ Usage: python test_retrieval_direct.py
 import os
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
+
+# Mock llama_index modules before any imports
+sys.modules['llama_index'] = MagicMock()
+sys.modules['llama_index.core'] = MagicMock()
+sys.modules['llama_index.core.schema'] = MagicMock()
+sys.modules['llama_index.core.node_parser'] = MagicMock()
+sys.modules['llama_index.core.retrievers'] = MagicMock()
+sys.modules['llama_index.core.query_engine'] = MagicMock()
+sys.modules['llama_index.core.response_synthesizers'] = MagicMock()
+sys.modules['llama_index.core.vector_stores'] = MagicMock()
+sys.modules['llama_index.core.vector_stores.types'] = MagicMock()
+sys.modules['llama_index.llms'] = MagicMock()
+sys.modules['llama_index.llms.llama_cpp'] = MagicMock()
+sys.modules['llama_index.llms.openai'] = MagicMock()
+sys.modules['llama_index.embeddings'] = MagicMock()
+sys.modules['llama_index.embeddings.huggingface'] = MagicMock()
+sys.modules['llama_index.vector_stores'] = MagicMock()
+sys.modules['llama_index.vector_stores.postgres'] = MagicMock()
+sys.modules['llama_index.readers'] = MagicMock()
+sys.modules['llama_index.readers.file'] = MagicMock()
+
+# Create mock QueryBundle
+class MockQueryBundle:
+    def __init__(self, query_str="", embedding=None):
+        self.query_str = query_str
+        self.embedding = embedding or []
+
+sys.modules['llama_index.core.schema'].QueryBundle = MockQueryBundle
 
 # Load environment
 from dotenv import load_dotenv

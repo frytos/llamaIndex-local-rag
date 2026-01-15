@@ -191,6 +191,12 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "gpu: marks tests that require GPU",
+    "vllm: marks tests requiring vLLM server",
+    "mlx: marks tests requiring MLX/Apple Silicon",
+    "robustness: marks robustness/edge case tests",
+    "unit: marks unit tests (fast, no external dependencies)",
+    "benchmark: marks tests as benchmarks (requires pytest-benchmark)",
+    "regression: marks tests as regression tests",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

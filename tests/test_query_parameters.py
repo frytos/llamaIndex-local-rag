@@ -6,9 +6,31 @@ Test Query Parameters - Verify ALL UI parameters are applied correctly
 import os
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
+
+# Mock llama_index before importing rag module
+mock_llama = MagicMock()
+sys.modules['llama_index'] = mock_llama
+sys.modules['llama_index.core'] = MagicMock()
+sys.modules['llama_index.core.schema'] = MagicMock()
+sys.modules['llama_index.core.node_parser'] = MagicMock()
+sys.modules['llama_index.core.retrievers'] = MagicMock()
+sys.modules['llama_index.core.query_engine'] = MagicMock()
+sys.modules['llama_index.core.response_synthesizers'] = MagicMock()
+sys.modules['llama_index.core.vector_stores'] = MagicMock()
+sys.modules['llama_index.core.vector_stores.types'] = MagicMock()
+sys.modules['llama_index.llms'] = MagicMock()
+sys.modules['llama_index.llms.llama_cpp'] = MagicMock()
+sys.modules['llama_index.llms.openai'] = MagicMock()
+sys.modules['llama_index.embeddings'] = MagicMock()
+sys.modules['llama_index.embeddings.huggingface'] = MagicMock()
+sys.modules['llama_index.vector_stores'] = MagicMock()
+sys.modules['llama_index.vector_stores.postgres'] = MagicMock()
+sys.modules['llama_index.readers'] = MagicMock()
+sys.modules['llama_index.readers.file'] = MagicMock()
 
 # Set minimal environment
 os.environ["PGHOST"] = "localhost"
