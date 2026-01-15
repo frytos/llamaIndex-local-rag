@@ -832,13 +832,35 @@ class Settings:
     semantic_cache_ttl: int = int(os.getenv("SEMANTIC_CACHE_TTL", "86400"))
 
     def __post_init__(self):
-        """Validate credentials are set after dataclass initialization."""
+        """Validate credentials and auto-detect RunPod connection if needed."""
+        # Auto-detect PostgreSQL from RunPod API if PGHOST is "auto" or not set
+        if not self.host or self.host == "auto":
+            try:
+                from utils.runpod_db_config import get_postgres_config
+
+                log.info("🔍 PGHOST not set - attempting RunPod auto-detection...")
+                config = get_postgres_config()
+
+                if config:
+                    self.host = config["host"]
+                    self.port = config["port"]
+                    self.user = config["user"]
+                    self.password = config["password"]
+                    self.db_name = config["database"]
+                    log.info(f"✅ Auto-detected PostgreSQL: {self.host}:{self.port}")
+                else:
+                    log.warning("⚠️  Auto-detection failed - using defaults")
+            except Exception as e:
+                log.warning(f"⚠️  Auto-detection failed: {e}")
+
+        # Validate credentials are set
         if not self.user or not self.password:
             raise ValueError(
                 "Database credentials not set!\n"
                 "Required environment variables:\n"
                 "  PGUSER=your_database_user\n"
                 "  PGPASSWORD=your_database_password\n"
+                "Or set PGHOST=auto to auto-detect from RunPod (requires RUNPOD_API_KEY)\n"
                 "Set them in .env file or export them."
             )
 
