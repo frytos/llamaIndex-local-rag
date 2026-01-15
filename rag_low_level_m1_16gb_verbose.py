@@ -1009,6 +1009,7 @@ def admin_conn():
                 port=S.port,
                 user=S.user,
                 password=S.password,
+                sslmode=os.getenv('PGSSLMODE', 'prefer'),
                 connect_timeout=10,
             )
         except PgOperationalError as e:
@@ -1046,6 +1047,7 @@ def db_conn():
                 port=S.port,
                 user=S.user,
                 password=S.password,
+                sslmode=os.getenv('PGSSLMODE', 'prefer'),
                 connect_timeout=10,
             )
         except PgOperationalError as e:
@@ -1105,6 +1107,35 @@ def ensure_pgvector_extension():
         c.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     conn.close()
     log.info(f"pgvector extension ensured in {dur_s(start):.2f}s")
+
+
+def verify_ssl_connection():
+    """
+    Verify that SSL is being used for the database connection.
+    Logs the SSL status and PostgreSQL version.
+    """
+    start = now_ms()
+    conn = db_conn()
+    conn.autocommit = True
+    try:
+        with conn.cursor() as c:
+            # Check if SSL is being used
+            c.execute("SELECT version(), ssl_is_used();")
+            version, ssl_used = c.fetchone()
+
+            if ssl_used:
+                log.info(f"SSL verification: Connection is encrypted (ssl_is_used=true)")
+            else:
+                sslmode = os.getenv('PGSSLMODE', 'prefer')
+                if sslmode == 'require':
+                    log.warning(f"SSL verification: PGSSLMODE=require but ssl_is_used=false - connection may not be encrypted")
+                else:
+                    log.info(f"SSL verification: Connection is not encrypted (ssl_is_used=false, PGSSLMODE={sslmode})")
+
+            log.debug(f"PostgreSQL version: {version}")
+    finally:
+        conn.close()
+    log.info(f"SSL verification completed in {dur_s(start):.2f}s")
 
 
 def reset_table_if_requested():
@@ -3102,6 +3133,7 @@ def main():
     # --- DB prep ---
     ensure_db_exists()
     ensure_pgvector_extension()
+    verify_ssl_connection()  # Verify SSL is enabled for database connections
 
     # --- Ingestion pipeline (skip if query-only mode) ---
     if not args.query_only:
