@@ -9,5 +9,5 @@ credentials:
       password: change_me_on_first_login
 cookie:
   expiry_days: 30
-  key: PLACEHOLDER_WILL_BE_REPLACED
+  key: zIcVW6yf_xGoaziXpzVXYBhcdydLHU21yCNU25tm__s
   name: rag_auth_cookie
