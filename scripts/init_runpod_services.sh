@@ -339,6 +339,8 @@ source /workspace/rag-pipeline/.venv/bin/activate
 
 export VLLM_MODEL="TheBloke/Mistral-7B-Instruct-v0.2-AWQ"
 export CUDA_VISIBLE_DEVICES=0
+# Force vLLM to use port 8000 (unset PORT env var to prevent override)
+unset PORT
 
 nohup python3 -m vllm.entrypoints.openai.api_server \
     --model $VLLM_MODEL \
@@ -349,7 +351,7 @@ nohup python3 -m vllm.entrypoints.openai.api_server \
     > /workspace/rag-pipeline/logs/vllm.log 2>&1 &
 
 echo $! > /workspace/rag-pipeline/vllm.pid
-echo "vLLM server started (PID: $(cat /workspace/rag-pipeline/vllm.pid))"
+echo "vLLM server started on port 8000 (PID: $(cat /workspace/rag-pipeline/vllm.pid))"
 VLLM_SCRIPT
 
     chmod +x "$PROJECT_DIR/start_vllm.sh"

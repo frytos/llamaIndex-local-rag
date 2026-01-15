@@ -1714,6 +1714,7 @@ def page_deployment():
                         "pip install --quiet fastapi uvicorn[standard] requests || echo Warning: Dependency installation failed && "
                         "echo && "
                         "echo [STEP 4/5] Starting embedding service... && "
+                        "export PORT=8001 && "
                         "nohup python3 -m uvicorn services.embedding_service:app --host 0.0.0.0 --port 8001 --workers 1 > /workspace/embedding_service.log 2>&1 & "
                         "echo Embedding service started on port 8001 && "
                         "sleep 5 && "
