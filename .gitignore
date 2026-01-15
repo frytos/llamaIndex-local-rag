@@ -163,6 +163,29 @@ hnsw_migration_report_*.txt
 *_FINDINGS.txt
 *_BOTTLENECK_ANALYSIS.txt
 
+# Sensitive audit reports (contain credentials, PII, or confidential data)
+# Use .priv extension for any sensitive documentation
+*.priv
+*.priv.md
+*.priv.html
+*.private
+*.private.md
+*.confidential.md
+
+# Specific sensitive audit reports
+docs/reports/audits/EXECUTIVE_SUMMARY.md
+docs/reports/audits/RISK_PRIORITY_MATRIX.md
+docs/reports/audits/TECHNICAL_DEEP_DIVE.md
+docs/reports/audits/CREDENTIAL_EXPOSURE_REPORT.md
+docs/reports/audits/index.html
+docs/reports/audits/DEBUGGABILITY_OBSERVABILITY_ASSESSMENT.md
+docs/reports/audits/OBSERVABILITY_EXECUTIVE_SUMMARY.md
+docs/reports/audits/SRE_*.md
+
+# Allow non-sensitive audit reports (if any)
+!docs/reports/audits/*_REDACTED.md
+!docs/reports/audits/README.md
+
 # Chat exports (should be in archive/chat-exports/)
 /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.txt
 
