@@ -60,7 +60,7 @@ class EmbedRequest(BaseModel):
     batch_size: int = Field(EMBED_BATCH, description="Batch size for processing")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "texts": ["Hello world", "This is a test"],
                 "model": "BAAI/bge-small-en",
@@ -79,7 +79,7 @@ class EmbedResponse(BaseModel):
     gpu_used: bool = Field(..., description="Whether GPU was used")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "embeddings": [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
                 "dimension": 384,
