@@ -1,0 +1,57 @@
+# Caddy Reverse Proxy Configuration for RAG Streamlit App
+# Automatic HTTPS with Let's Encrypt
+#
+# Usage:
+# 1. Set DOMAIN environment variable
+# 2. Deploy this file to /etc/caddy/Caddyfile on your server
+# 3. Run: sudo systemctl restart caddy
+#
+# Caddy automatically:
+# - Obtains Let's Encrypt certificates
+# - Renews certificates before expiration
+# - Redirects HTTP -> HTTPS
+# - Configures modern TLS settings (TLS 1.2+, secure ciphers)
+
+{env.DOMAIN} {
+    # Reverse proxy to Streamlit app
+    reverse_proxy localhost:8501 {
+        # Preserve client IP and protocol for authentication logs
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+    }
+
+    # Security headers (OWASP best practices)
+    header {
+        # HTTP Strict Transport Security - force HTTPS for 2 years
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+
+        # Prevent clickjacking
+        X-Frame-Options "DENY"
+
+        # Control referrer information
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Content Security Policy - allow self-hosted resources
+        # Streamlit requires 'unsafe-inline' for styles and 'unsafe-eval' for JavaScript
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:;"
+
+        # Permissions Policy - restrict sensitive features
+        Permissions-Policy "geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=()"
+
+        # Remove server header for security through obscurity
+        -Server
+    }
+
+    # Enable gzip compression for better performance
+    encode gzip
+
+    # Logging for debugging and security monitoring
+    log {
+        output file /var/log/caddy/access.log
+        format json
+    }
+}
