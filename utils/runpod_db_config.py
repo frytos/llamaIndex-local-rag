@@ -115,7 +115,7 @@ def get_postgres_config(
                     break
 
         else:
-            # Use most recently created pod with PostgreSQL port
+            # Use most recently created pod with BOTH PostgreSQL AND embedding service
             # Sort by creation time (newest first)
             pods_sorted = sorted(
                 pods,
@@ -123,20 +123,32 @@ def get_postgres_config(
                 reverse=True
             )
 
+            # First pass: Try to find pod with both PostgreSQL (5432) AND embedding (8001)
             for pod in pods_sorted:
                 runtime = pod.get("runtime", {})
                 ports = runtime.get("ports", [])
 
-                # Check if pod has PostgreSQL port (5432)
-                has_postgres = any(
-                    port.get("privatePort") == 5432
-                    for port in ports
-                )
+                has_postgres = any(port.get("privatePort") == 5432 for port in ports)
+                has_embedding = any(port.get("privatePort") == 8001 for port in ports)
 
-                if has_postgres:
+                if has_postgres and has_embedding:
                     target_pod = pod
-                    log.info(f"Using most recent pod with PostgreSQL: {pod.get('name')}")
+                    log.info(f"Using fully-configured pod (PostgreSQL + Embedding): {pod.get('name')}")
                     break
+
+            # Second pass: If no fully-configured pod, fall back to PostgreSQL-only pod
+            if not target_pod:
+                for pod in pods_sorted:
+                    runtime = pod.get("runtime", {})
+                    ports = runtime.get("ports", [])
+
+                    has_postgres = any(port.get("privatePort") == 5432 for port in ports)
+
+                    if has_postgres:
+                        target_pod = pod
+                        log.warning(f"Using pod with PostgreSQL only (no embedding service): {pod.get('name')}")
+                        log.warning("  Embedding service will use CPU fallback")
+                        break
 
         if not target_pod:
             log.warning("No suitable RunPod pod found")
@@ -282,27 +294,38 @@ def get_embedding_endpoint(
                     break
 
         else:
-            # Use most recently created pod with PostgreSQL port
+            # Use most recently created pod with embedding service port (8001)
+            # Sort by creation time (newest first)
             pods_sorted = sorted(
                 pods,
                 key=lambda p: p.get("createdAt", ""),
                 reverse=True
             )
 
+            # Prefer pods that have port 8001 exposed (indicates embedding service configured)
             for pod in pods_sorted:
                 runtime = pod.get("runtime", {})
                 ports = runtime.get("ports", [])
 
-                # Check if pod has PostgreSQL port (5432)
-                has_postgres = any(
-                    port.get("privatePort") == 5432
-                    for port in ports
-                )
+                has_embedding = any(port.get("privatePort") == 8001 for port in ports)
 
-                if has_postgres:
+                if has_embedding:
                     target_pod = pod
-                    log.info(f"Using most recent pod with PostgreSQL: {pod.get('name')}")
+                    log.info(f"Using pod with embedding service port: {pod.get('name')}")
                     break
+
+            # Fallback: Use any pod with PostgreSQL (might not have embedding yet)
+            if not target_pod:
+                for pod in pods_sorted:
+                    runtime = pod.get("runtime", {})
+                    ports = runtime.get("ports", [])
+
+                    has_postgres = any(port.get("privatePort") == 5432 for port in ports)
+
+                    if has_postgres:
+                        target_pod = pod
+                        log.warning(f"Using PostgreSQL pod without embedding service: {pod.get('name')}")
+                        break
 
         if not target_pod:
             log.warning("No suitable RunPod pod found for embedding endpoint")

@@ -1670,8 +1670,9 @@ def page_deployment():
                 # Create pod
                 progress.progress(10, text="Creating pod on RunPod...")
 
-                # Get embedding API key from Railway environment (will be passed to pod)
+                # Get configuration from Railway environment (will be passed to pod)
                 embedding_api_key = os.getenv("RUNPOD_EMBEDDING_API_KEY", "")
+                pg_password = os.getenv("PGPASSWORD", "frytos")  # Custom password or default
 
                 custom_env = {
                     "USE_VLLM": "1",
@@ -1679,7 +1680,10 @@ def page_deployment():
                     "EMBED_MODEL": embed_model,
                     "CTX": str(ctx_size),
                     "TOP_K": str(top_k),
-                    "RUNPOD_EMBEDDING_API_KEY": embedding_api_key  # For embedding service authentication
+                    "RUNPOD_EMBEDDING_API_KEY": embedding_api_key,  # For embedding service authentication
+                    "PGPASSWORD": pg_password,  # Custom PostgreSQL password from Railway
+                    "PGUSER": os.getenv("PGUSER", "fryt"),
+                    "DB_NAME": os.getenv("DB_NAME", "vector_db")
                 }
 
                 # Build docker_args for auto-setup
