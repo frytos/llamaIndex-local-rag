@@ -115,13 +115,49 @@ st.set_page_config(
 
 def init_session_state():
     """Initialize session state variables."""
+    # Auto-detect database connection if PGHOST is "auto"
+    pghost = os.environ.get("PGHOST", "localhost")
+
+    if not pghost or pghost == "auto":
+        try:
+            from utils.runpod_db_config import get_postgres_config
+            config = get_postgres_config()
+            if config:
+                pghost = config["host"]
+                pgport = config["port"]
+                pguser = config["user"]
+                pgpassword = config["password"]
+                pgdb = config["database"]
+                log.info(f"✅ Auto-detected PostgreSQL for web UI: {pghost}:{pgport}")
+            else:
+                # Fallback to env vars
+                pghost = "localhost"
+                pgport = os.environ.get("PGPORT", "5432")
+                pguser = os.environ.get("PGUSER")
+                pgpassword = os.environ.get("PGPASSWORD")
+                pgdb = os.environ.get("DB_NAME", "vector_db")
+                log.warning("⚠️ Auto-detection failed, using defaults")
+        except Exception as e:
+            log.warning(f"⚠️ Auto-detection error: {e}")
+            pghost = "localhost"
+            pgport = os.environ.get("PGPORT", "5432")
+            pguser = os.environ.get("PGUSER")
+            pgpassword = os.environ.get("PGPASSWORD")
+            pgdb = os.environ.get("DB_NAME", "vector_db")
+    else:
+        # Use static config from environment
+        pgport = os.environ.get("PGPORT", "5432")
+        pguser = os.environ.get("PGUSER")
+        pgpassword = os.environ.get("PGPASSWORD")
+        pgdb = os.environ.get("DB_NAME", "vector_db")
+
     defaults = {
         # Database settings
-        "db_host": os.environ.get("PGHOST", "localhost"),
-        "db_port": os.environ.get("PGPORT", "5432"),
-        "db_user": os.environ.get("PGUSER"),
-        "db_password": os.environ.get("PGPASSWORD"),
-        "db_name": os.environ.get("DB_NAME", "vector_db"),
+        "db_host": pghost,
+        "db_port": pgport,
+        "db_user": pguser,
+        "db_password": pgpassword,
+        "db_name": pgdb,
 
         # Cached resources
         "embed_model": None,
