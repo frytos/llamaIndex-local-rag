@@ -12,7 +12,7 @@
 # - Redirects HTTP -> HTTPS
 # - Configures modern TLS settings (TLS 1.2+, secure ciphers)
 
-{env.DOMAIN} {
+{$DOMAIN:localhost} {
     # Reverse proxy to Streamlit app
     reverse_proxy localhost:8501 {
         # Preserve client IP and protocol for authentication logs
