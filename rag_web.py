@@ -728,57 +728,17 @@ def run_indexing(doc_path: Path, table_name: str, chunk_size: int, chunk_overlap
         try:
             nodes = build_nodes(docs, chunks, doc_idxs)
 
-            # Get or load embedding model
+            # Use the main pipeline's embed_nodes() function which supports RunPod GPU
             embed_model = get_embed_model(embed_model_name)
+            rag.embed_nodes(embed_model, nodes)
 
-            # Embed in batches with progress
-            batch_size = 64
-            total_batches = (len(nodes) + batch_size - 1) // batch_size
-
-            embeddings_list = []
-            for i, batch in enumerate(chunked(nodes, batch_size)):
-                texts = [n.get_content() for n in batch]
-
-                try:
-                    batch_embeddings = embed_model.get_text_embedding_batch(texts)
-
-                    # Verify batch size matches
-                    if len(batch_embeddings) != len(batch):
-                        st.warning(f"Batch {i+1}: Mismatch! Expected {len(batch)}, got {len(batch_embeddings)}. Retrying individually...")
-
-                        # Fallback: embed one by one
-                        batch_embeddings = []
-                        for text in texts:
-                            try:
-                                emb = embed_model.get_text_embedding(text)
-                                batch_embeddings.append(emb)
-                            except Exception as e:
-                                st.error(f"Failed to embed text: {str(e)[:100]}")
-                                # Use zero vector as fallback
-                                batch_embeddings.append([0.0] * embed_dim)
-
-                except Exception as e:
-                    st.error(f"Batch {i+1} failed: {e}. Trying individual embeddings...")
-
-                    # Fallback to individual embedding
-                    batch_embeddings = []
-                    for text in texts:
-                        try:
-                            emb = embed_model.get_text_embedding(text)
-                            batch_embeddings.append(emb)
-                        except Exception as e2:
-                            st.error(f"Individual embedding failed: {str(e2)[:100]}")
-                            batch_embeddings.append([0.0] * embed_dim)
-
-                for node, emb in zip(batch, batch_embeddings):
-                    node.embedding = emb
-                    embeddings_list.append(emb)
-
-                progress.progress(40 + int(40 * (i + 1) / total_batches))
-
+            progress.progress(80)
             st.success(f"✓ Embedded {len(nodes)} chunks")
+
+            # Store for session state
             st.session_state.last_indexed_nodes = nodes
-            st.session_state.last_embeddings = np.array(embeddings_list)
+            embeddings_list = [n.embedding for n in nodes if n.embedding]
+            st.session_state.last_embeddings = np.array(embeddings_list) if embeddings_list else None
         except Exception as e:
             st.error(f"Error embedding: {e}")
             status.update(label="Indexing Failed", state="error")
