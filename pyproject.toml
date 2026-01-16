@@ -72,6 +72,14 @@ Issues = "https://github.com/yourusername/llamaindex-local-rag/issues"
 requires = ["setuptools>=68.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["utils*", "auth*", "config*"]
+exclude = ["tests*", "scripts*", "archive*", "data*", "query_logs*", "results*", "benchmarks*", "logs*"]
+
+[tool.setuptools]
+py-modules = ["rag_interactive", "rag_low_level_m1_16gb_verbose", "rag_web", "vllm_client", "vllm_wrapper", "reranker", "query_cache", "performance_analysis"]
+
 # Black - Code Formatting
 [tool.black]
 line-length = 100
