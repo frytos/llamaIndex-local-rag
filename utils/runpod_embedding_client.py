@@ -92,8 +92,24 @@ class RunPodEmbeddingClient:
 
             return is_healthy
 
+        except requests.Timeout as e:
+            log.error(f"❌ Health check TIMEOUT after 5s")
+            log.error(f"   Endpoint: {self.endpoint_url}/health")
+            log.error(f"   This usually means service is slow or overloaded")
+            return False
+        except requests.ConnectionError as e:
+            log.error(f"❌ Health check CONNECTION FAILED")
+            log.error(f"   Endpoint: {self.endpoint_url}/health")
+            log.error(f"   Error: {str(e)[:200]}")
+            log.error(f"   Possible causes:")
+            log.error(f"      - Service not running on RunPod")
+            log.error(f"      - Wrong IP/port (check port mappings)")
+            log.error(f"      - Firewall blocking connection")
+            return False
         except Exception as e:
-            log.error(f"❌ Health check failed: {e}")
+            log.error(f"❌ Health check FAILED: {type(e).__name__}")
+            log.error(f"   Endpoint: {self.endpoint_url}/health")
+            log.error(f"   Error: {str(e)[:200]}")
             return False
 
     def embed_texts(

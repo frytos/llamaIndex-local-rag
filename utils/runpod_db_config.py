@@ -83,7 +83,8 @@ def get_postgres_config(
         api_key = runpod_api_key or os.getenv("RUNPOD_API_KEY")
 
         if not api_key:
-            log.warning("RUNPOD_API_KEY not set - cannot auto-detect")
+            log.warning("❌ RUNPOD_API_KEY not set - cannot auto-detect")
+            log.warning("   Set RUNPOD_API_KEY in environment variables")
             return None
 
         manager = RunPodManager(api_key=api_key)
@@ -92,8 +93,11 @@ def get_postgres_config(
         pods = manager.list_pods()
 
         if not pods:
-            log.warning("No RunPod pods found")
+            log.warning("❌ No RunPod pods found")
+            log.warning("   Create a pod with PostgreSQL enabled")
             return None
+
+        log.info(f"   Found {len(pods)} pod(s)")
 
         # Filter and select pod
         target_pod = None
@@ -124,21 +128,25 @@ def get_postgres_config(
             )
 
             # First pass: Try to find pod with both PostgreSQL (5432) AND embedding (8001)
+            log.info(f"\n   🔍 Evaluating pods (prefer PostgreSQL + Embedding):")
             for pod in pods_sorted:
+                pod_name = pod.get('name', 'unknown')
                 runtime = pod.get("runtime", {}) or {}
                 ports = runtime.get("ports", []) or []
 
                 # Skip pods with no port mappings (stopped/starting pods)
                 if not ports:
-                    log.debug(f"Skipping pod {pod.get('name')} - no port mappings")
+                    log.info(f"      ⏭️  {pod_name}: SKIP (no port mappings - stopped/starting)")
                     continue
 
                 has_postgres = any(port.get("privatePort") == 5432 for port in ports)
                 has_embedding = any(port.get("privatePort") == 8001 for port in ports)
 
+                log.info(f"      🔍 {pod_name}: PostgreSQL={has_postgres}, Embedding={has_embedding}")
+
                 if has_postgres and has_embedding:
                     target_pod = pod
-                    log.info(f"Using fully-configured pod (PostgreSQL + Embedding): {pod.get('name')}")
+                    log.info(f"      ✅ SELECTED: Fully-configured (PostgreSQL + Embedding)")
                     break
 
             # Second pass: If no fully-configured pod, fall back to PostgreSQL-only pod

@@ -2547,14 +2547,47 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
     # Auto-detect embedding endpoint from RunPod API
     from utils.runpod_db_config import get_embedding_endpoint
 
-    runpod_endpoint = get_embedding_endpoint()
-    runpod_api_key = os.getenv("RUNPOD_EMBEDDING_API_KEY")
+    log.info(f"\n{'='*70}")
+    log.info(f"EMBEDDING MODE SELECTION")
+    log.info(f"{'='*70}")
 
+    # Check environment configuration
+    runpod_api_key = os.getenv("RUNPOD_EMBEDDING_API_KEY")
+    runpod_api_key_set = bool(runpod_api_key)
+
+    log.info(f"🔍 Environment Check:")
+    log.info(f"   RUNPOD_API_KEY: {'✅ Set' if os.getenv('RUNPOD_API_KEY') else '❌ Not set'}")
+    log.info(f"   RUNPOD_EMBEDDING_API_KEY: {'✅ Set ({} chars)'.format(len(runpod_api_key)) if runpod_api_key_set else '❌ Not set'}")
+    log.info(f"   RUNPOD_EMBEDDING_ENDPOINT: {os.getenv('RUNPOD_EMBEDDING_ENDPOINT', 'auto')}")
+
+    # Attempt auto-detection
+    log.info(f"\n🔍 Attempting endpoint auto-detection...")
+    runpod_endpoint = get_embedding_endpoint()
+
+    if runpod_endpoint:
+        log.info(f"   ✅ Endpoint found: {runpod_endpoint}")
+    else:
+        log.warning(f"   ❌ Endpoint not found")
+
+    # Decision logic
+    log.info(f"\n🎯 Embedding Mode Decision:")
     if runpod_endpoint and runpod_api_key:
-        log.info(f"🚀 Using RunPod GPU for embeddings")
+        log.info(f"   ✅ Endpoint: {runpod_endpoint}")
+        log.info(f"   ✅ API Key: Set (length: {len(runpod_api_key)})")
+        log.info(f"   → MODE: RunPod GPU (100x faster)")
+        log.info(f"{'='*70}\n")
         return _embed_nodes_remote(nodes, runpod_endpoint, runpod_api_key)
     else:
-        log.info(f"💻 Using local embedding model")
+        log.info(f"   ⚠️  Reason for CPU fallback:")
+        if not runpod_endpoint:
+            log.info(f"      - No embedding endpoint found")
+            log.info(f"      - Auto-detection failed (check RunPod API)")
+            log.info(f"      - Verify pod has port 8001 exposed")
+        if not runpod_api_key:
+            log.info(f"      - RUNPOD_EMBEDDING_API_KEY not set")
+            log.info(f"      - Set this in Railway environment variables")
+        log.info(f"   → MODE: Local CPU/GPU")
+        log.info(f"{'='*70}\n")
         return _embed_nodes_local(embed_model, nodes)
 
 
@@ -2591,13 +2624,25 @@ def _embed_nodes_remote(nodes: List[TextNode], endpoint: str, api_key: str) -> N
 
     try:
         # Check service health first
-        if not client.check_health():
-            log.warning("⚠️  RunPod embedding service unhealthy, falling back to local embedding")
+        log.info(f"\n🏥 Health Check:")
+        log.info(f"   Endpoint: {endpoint}")
+        log.info(f"   Checking: GET {endpoint}/health")
+
+        health_ok = client.check_health()
+
+        if not health_ok:
+            log.warning(f"   ❌ Health check FAILED")
+            log.warning(f"   Possible reasons:")
+            log.warning(f"      - Service not started on RunPod")
+            log.warning(f"      - Wrong endpoint (check port mapping)")
+            log.warning(f"      - Network connectivity issue")
+            log.warning(f"   → Falling back to local embedding")
             client.close()
             # Rebuild local model and use it
             embed_model = build_embed_model()
             return _embed_nodes_local(embed_model, nodes)
 
+        log.info(f"   ✅ Health check PASSED - Service ready")
         log.info(f"\n🔄 Sending {len(texts)} texts to RunPod GPU...")
         embeddings = client.embed_texts(
             texts=texts,
