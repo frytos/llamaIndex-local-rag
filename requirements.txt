@@ -212,3 +212,4 @@ hf-xet==1.2.0                     # HuggingFace XET
 # Monitoring & Observability
 # ----------------------------------------------------------------------------
 prometheus-client==0.23.1         # Prometheus metrics export
+sentry-sdk[fastapi,sqlalchemy]==2.20.0  # Error tracking and performance monitoring

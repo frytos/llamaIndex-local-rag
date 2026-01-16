@@ -32,6 +32,10 @@ else:
     if config_env.exists():
         load_dotenv(config_env)
 
+# Initialize Sentry early (after dotenv, before streamlit)
+from utils.sentry_config import init_sentry
+init_sentry()
+
 import streamlit as st
 from auth.authenticator import load_authenticator
 import plotly.express as px

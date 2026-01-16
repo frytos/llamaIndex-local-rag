@@ -17,6 +17,14 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import psycopg2
 
+# Load environment variables first
+from dotenv import load_dotenv
+load_dotenv()
+
+# Initialize Sentry early (before any operations)
+from utils.sentry_config import init_sentry
+init_sentry()
+
 # Import shared utilities
 from utils.naming import extract_model_short_name, generate_table_name, sanitize_table_name
 

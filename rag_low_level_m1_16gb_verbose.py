@@ -42,6 +42,10 @@ except ImportError:
     # python-dotenv not installed, rely on manual export
     pass
 
+# Initialize Sentry early (before any operations that might fail)
+from utils.sentry_config import init_sentry
+init_sentry()
+
 # Third-party imports
 import psycopg2
 from psycopg2 import OperationalError as PgOperationalError
@@ -81,6 +85,15 @@ from utils.naming import (
     extract_model_short_name as _extract_model_short_name,
     generate_table_name as _generate_table_name,
     sanitize_table_name,
+)
+
+# Sentry monitoring utilities
+from utils.sentry_config import (
+    capture_exception,
+    add_breadcrumb,
+    increment_counter,
+    record_distribution,
+    measure_performance,
 )
 
 # Optional: vLLM for GPU-accelerated inference (15x faster than llama.cpp CPU)
@@ -2170,9 +2183,14 @@ def load_documents(doc_path: str) -> List[Any]:
     Load documents from various formats (PDF, DOCX, TXT, MD) or from a folder.
     Returns LlamaIndex Documents.
     """
+    # Sentry: Track document loading
+    add_breadcrumb("Loading documents", category="document_processing", doc_path=doc_path)
+
     path = Path(doc_path)
 
     if not path.exists():
+        # Sentry: Track file not found errors
+        increment_counter("rag.error.file_not_found")
         raise FileNotFoundError(
             f"Document not found: {doc_path}\n"
             f"  Fix: Place your document at this path or set PDF_PATH environment variable\n"
@@ -2380,6 +2398,14 @@ def load_documents(doc_path: str) -> List[Any]:
         else:
             log.info(f"  ℹ️  Note: {ext.upper()} loaded as single document for context preservation")
 
+    # Sentry: Track successful document loading
+    load_time_ms = (now_ms() - t)
+    increment_counter("rag.documents.loaded", value=len(docs))
+    record_distribution("rag.document_loading.time_ms", load_time_ms)
+    record_distribution("rag.document.chars", total_chars)
+    add_breadcrumb(f"Loaded {len(docs)} documents", category="document_processing",
+                   doc_count=len(docs), load_time_ms=load_time_ms)
+
     return docs
 
 
@@ -2388,6 +2414,10 @@ def chunk_documents(docs: List[Any]) -> Tuple[List[str], List[int]]:
     Turn documents into text chunks.
     We keep doc_idxs so each chunk knows which doc/page it came from (for metadata/citations).
     """
+    # Sentry: Track chunking
+    add_breadcrumb("Chunking documents", category="document_processing",
+                   doc_count=len(docs), chunk_size=S.chunk_size, chunk_overlap=S.chunk_overlap)
+
     log.info(f"\n{'='*70}")
     log.info(f"STEP 1: CHUNKING - Breaking documents into retrievable pieces")
     log.info(f"{'='*70}")
@@ -2443,6 +2473,14 @@ def chunk_documents(docs: List[Any]) -> Tuple[List[str], List[int]]:
         example_text = preview(chunks[0], PERFORMANCE.DEFAULT_PREVIEW_LENGTH)
         colored_example = colorize_participants(example_text)
         log.info(f"    \"{colored_example}\"")
+
+    # Sentry: Track chunking metrics
+    chunk_time_ms = (now_ms() - t)
+    increment_counter("rag.chunks.created", value=len(chunks))
+    record_distribution("rag.chunking.time_ms", chunk_time_ms)
+    record_distribution("rag.chunk.size_chars", avg_chunk_size)
+    add_breadcrumb(f"Created {len(chunks)} chunks", category="document_processing",
+                   chunk_count=len(chunks), avg_size=avg_chunk_size)
 
     return chunks, doc_idxs
 
@@ -2544,6 +2582,10 @@ def embed_nodes(embed_model: HuggingFaceEmbedding, nodes: List[TextNode]) -> Non
     This is often the longest step after LLM inference.
     We do batching for speed and steadier memory usage.
     """
+    # Sentry: Track embedding operation
+    add_breadcrumb("Starting embedding", category="embedding",
+                   node_count=len(nodes), embed_model=S.embed_model_name)
+
     # Auto-detect embedding endpoint from RunPod API
     from utils.runpod_db_config import get_embedding_endpoint
 
@@ -2767,6 +2809,13 @@ def _embed_nodes_local(embed_model: HuggingFaceEmbedding, nodes: List[TextNode])
     log.info(f"    • Throughput: {throughput:.1f} nodes/second")
     log.info(f"    • Time per node: {total_time/total*1000:.1f}ms")
     log.info(f"\n  ℹ️  These embeddings enable semantic similarity search in the next step")
+
+    # Sentry: Track embedding metrics
+    increment_counter("rag.nodes.embedded", value=total)
+    record_distribution("rag.embedding.time_ms", total_time * 1000)
+    record_distribution("rag.embedding.throughput_nodes_per_sec", throughput)
+    add_breadcrumb(f"Embedded {total} nodes", category="embedding",
+                   total_time_s=total_time, throughput=throughput)
 
     # Memory optimization: Force garbage collection after embedding phase
     gc.collect()
@@ -3120,6 +3169,9 @@ def run_query(query_engine: Any, question: str, show_sources: bool = True, retri
     Returns:
         The answer text (for caching)
     """
+    # Sentry: Track query execution
+    add_breadcrumb("Executing query", category="query", question=question[:100])
+
     log.info(f"\n{'='*70}")
     log.info(f"STEP 5: GENERATION - LLM synthesizes answer from retrieved chunks")
     log.info(f"{'='*70}")
@@ -3199,6 +3251,14 @@ def run_query(query_engine: Any, question: str, show_sources: bool = True, retri
             generation_time=generation_time,
             parameters=parameters
         )
+
+    # Sentry: Track query metrics
+    increment_counter("rag.query.executed")
+    record_distribution("rag.query.generation_time_ms", generation_time * 1000)
+    record_distribution("rag.query.total_time_ms", (retrieval_time + generation_time) * 1000)
+    record_distribution("rag.query.answer_length_chars", answer_length)
+    add_breadcrumb("Query completed", category="query",
+                   generation_time_s=generation_time, answer_length=answer_length)
 
     # Memory optimization: Force garbage collection after query
     gc.collect()
