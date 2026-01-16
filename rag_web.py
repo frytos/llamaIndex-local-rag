@@ -202,6 +202,8 @@ def get_db_connection(autocommit=False):
         user=st.session_state.db_user,
         password=st.session_state.db_password,
         dbname=st.session_state.db_name,
+        sslmode=os.getenv('PGSSLMODE', 'prefer'),
+        connect_timeout=10,
     )
     conn.autocommit = autocommit
     return conn
