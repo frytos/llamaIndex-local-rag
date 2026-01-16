@@ -1,0 +1,291 @@
+{
+  "test_pack_name": "Technical Documentation - RAG Codebase",
+  "description": "Evaluate RAG performance on technical documentation and code",
+  "version": "1.0.0",
+  "created": "2026-01-16",
+  "target_index": "codebase_docs",
+  "file_types": ["md", "py", "sh"],
+
+  "test_cases": [
+    {
+      "id": "tech-001",
+      "query": "How do I enable GPU embeddings on RunPod?",
+      "category": "how-to",
+      "difficulty": "medium",
+      "multi_hop": false,
+
+      "expected_sources": [
+        "services/embedding_service.py",
+        "utils/runpod_embedding_client.py",
+        "docs/RAG_EVALUATION_FRAMEWORK.md"
+      ],
+
+      "expected_citations": [
+        "RUNPOD_EMBEDDING_API_KEY",
+        "port 8001",
+        "FastAPI",
+        "GPU acceleration"
+      ],
+
+      "grading_rules": {
+        "must_mention": ["API key", "port 8001", "RunPod"],
+        "should_mention": ["FastAPI service", "health check", "GPU"],
+        "should_not_mention": ["localhost", "Mac", "MLX"],
+        "expected_steps": [
+          "Set RUNPOD_EMBEDDING_API_KEY environment variable",
+          "Start embedding service on RunPod",
+          "Verify GPU available in health check"
+        ],
+        "min_citations": 3
+      },
+
+      "ground_truth": "To enable GPU embeddings: 1) Set RUNPOD_EMBEDDING_API_KEY on Railway, 2) Start the FastAPI embedding service on RunPod port 8001, 3) Service auto-detected via RunPod API"
+    },
+
+    {
+      "id": "tech-002",
+      "query": "What embedding models are supported and what are their dimensions?",
+      "category": "factual-lookup",
+      "difficulty": "easy",
+      "multi_hop": false,
+
+      "expected_sources": [
+        "CLAUDE.md",
+        "config/constants.py"
+      ],
+
+      "expected_citations": [
+        "BAAI/bge-small-en",
+        "384",
+        "BAAI/bge-m3",
+        "1024"
+      ],
+
+      "grading_rules": {
+        "must_mention": ["bge-small-en", "384", "bge-m3", "1024"],
+        "should_mention": ["dimensions", "multilingual"],
+        "min_citations": 4,
+        "exact_facts": {
+          "bge-small-en": "384 dimensions",
+          "bge-m3": "1024 dimensions"
+        }
+      },
+
+      "ground_truth": "bge-small-en (384d), bge-m3 (1024d multilingual), all-MiniLM-L6-v2 (384d)"
+    },
+
+    {
+      "id": "tech-003",
+      "query": "How does auto-detection work for finding RunPod pods?",
+      "category": "conceptual",
+      "difficulty": "hard",
+      "multi_hop": true,
+
+      "expected_sources": [
+        "utils/runpod_db_config.py",
+        "rag_low_level_m1_16gb_verbose.py"
+      ],
+
+      "expected_citations": [
+        "get_postgres_config",
+        "port mappings",
+        "5432",
+        "8001",
+        "RunPod API"
+      ],
+
+      "grading_rules": {
+        "must_mention": ["RunPod API", "port mappings", "auto-detect"],
+        "should_mention": ["PostgreSQL", "embedding service", "priority"],
+        "expected_concepts": [
+          "Queries RunPod API for pod list",
+          "Prefers pods with both PostgreSQL (5432) and embedding (8001) ports",
+          "Skips pods without port mappings",
+          "Falls back to PostgreSQL-only pods"
+        ],
+        "min_citations": 5
+      },
+
+      "ground_truth": "Auto-detection queries RunPod API, finds pods with active port mappings, prefers pods with both port 5432 (PostgreSQL) and 8001 (embedding service), skips stopped pods"
+    },
+
+    {
+      "id": "tech-004",
+      "query": "What are the chunking presets and when should I use each one?",
+      "category": "guidance",
+      "difficulty": "medium",
+      "multi_hop": false,
+
+      "expected_sources": [
+        "rag_web.py",
+        "CLAUDE.md"
+      ],
+
+      "expected_citations": [
+        "300/50",
+        "700/150",
+        "1000/200",
+        "chat messages",
+        "general documents"
+      ],
+
+      "grading_rules": {
+        "must_mention": ["chunk size", "overlap"],
+        "should_list_presets": ["Chat messages (300/50)", "General documents (700/150)", "Technical docs (1000/200)"],
+        "should_explain_tradeoffs": true,
+        "min_citations": 3
+      },
+
+      "ground_truth": "Chat (300/50) for short messages, General (700/150) for balanced docs, Technical (1000/200) for code/complex content"
+    },
+
+    {
+      "id": "tech-005",
+      "query": "What happens if the RunPod embedding service is unavailable?",
+      "category": "error-handling",
+      "difficulty": "medium",
+      "multi_hop": true,
+
+      "expected_sources": [
+        "rag_low_level_m1_16gb_verbose.py",
+        "utils/runpod_embedding_client.py"
+      ],
+
+      "expected_citations": [
+        "fallback",
+        "local embedding",
+        "check_health",
+        "ConnectionError"
+      ],
+
+      "grading_rules": {
+        "must_mention": ["fallback", "local", "CPU"],
+        "should_explain_flow": [
+          "Health check fails",
+          "Catches ConnectionError",
+          "Falls back to local embedding",
+          "System continues working"
+        ],
+        "should_not_say": ["system crashes", "indexing fails"],
+        "min_citations": 3
+      },
+
+      "ground_truth": "System checks health, catches connection errors, automatically falls back to local CPU/GPU embedding, continues working with degraded performance"
+    },
+
+    {
+      "id": "tech-006",
+      "query": "List all services and their port assignments on RunPod",
+      "category": "factual-lookup",
+      "difficulty": "easy",
+      "multi_hop": false,
+
+      "expected_sources": [
+        "scripts/init_runpod_services.sh",
+        "utils/runpod_manager.py"
+      ],
+
+      "expected_citations": [
+        "5432",
+        "8000",
+        "8001",
+        "PostgreSQL",
+        "vLLM",
+        "Embedding"
+      ],
+
+      "grading_rules": {
+        "must_list_all": {
+          "PostgreSQL": "5432",
+          "vLLM": "8000",
+          "Embedding API": "8001",
+          "SSH": "22"
+        },
+        "format": "service: port",
+        "min_citations": 4
+      },
+
+      "ground_truth": "PostgreSQL: 5432, vLLM: 8000, Embedding API: 8001, SSH: 22, Grafana: 3000"
+    },
+
+    {
+      "id": "tech-007",
+      "query": "Why did Railway builds take 15 minutes and how was it optimized?",
+      "category": "problem-solution",
+      "difficulty": "hard",
+      "multi_hop": true,
+
+      "expected_sources": [
+        "build-base-image.sh",
+        "Dockerfile",
+        "Dockerfile.base"
+      ],
+
+      "expected_citations": [
+        "200+ packages",
+        "torch",
+        "multi-stage build",
+        "base image",
+        "layer caching"
+      ],
+
+      "grading_rules": {
+        "must_explain_problem": "Installing 200+ packages including torch (800MB) every build",
+        "must_explain_solutions": ["Multi-stage Dockerfile", "Pre-built base image", "Docker layer caching"],
+        "should_mention_tradeoff": "Base image requires multi-platform build (amd64 + arm64)",
+        "min_citations": 5
+      },
+
+      "ground_truth": "Initial builds installed 200+ packages (15min). Fixed with multi-stage Dockerfile for layer caching. Can use pre-built base image for 30-60sec rebuilds."
+    },
+
+    {
+      "id": "tech-008",
+      "query": "How do I upload files from my computer for indexing?",
+      "category": "how-to",
+      "difficulty": "easy",
+      "multi_hop": false,
+
+      "expected_sources": [
+        "rag_web.py"
+      ],
+
+      "expected_citations": [
+        "Upload files from your computer",
+        "st.file_uploader",
+        "drag and drop"
+      ],
+
+      "grading_rules": {
+        "must_mention": ["upload", "browser", "drag and drop"],
+        "should_list_steps": [
+          "Go to Index Documents page",
+          "Select 'Upload files from your computer'",
+          "Drag files or click to browse",
+          "Start indexing"
+        ],
+        "should_mention": ["supported file types"],
+        "min_citations": 2
+      },
+
+      "ground_truth": "Select 'Upload files from your computer', drag/drop files into browser, supported: PDF, TXT, HTML, MD, PY, JS, JSON, CSV"
+    }
+  ],
+
+  "overall_scoring": {
+    "grounding_weight": 0.25,
+    "source_selection_weight": 0.20,
+    "completeness_weight": 0.20,
+    "no_invention_weight": 0.15,
+    "multi_hop_weight": 0.10,
+    "latency_weight": 0.10
+  },
+
+  "passing_threshold": 7.0,
+  "latency_targets": {
+    "excellent": 2.0,
+    "good": 5.0,
+    "acceptable": 10.0,
+    "poor": 15.0
+  }
+}
