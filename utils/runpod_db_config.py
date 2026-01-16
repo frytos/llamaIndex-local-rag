@@ -125,8 +125,13 @@ def get_postgres_config(
 
             # First pass: Try to find pod with both PostgreSQL (5432) AND embedding (8001)
             for pod in pods_sorted:
-                runtime = pod.get("runtime", {})
-                ports = runtime.get("ports", [])
+                runtime = pod.get("runtime", {}) or {}
+                ports = runtime.get("ports", []) or []
+
+                # Skip pods with no port mappings (stopped/starting pods)
+                if not ports:
+                    log.debug(f"Skipping pod {pod.get('name')} - no port mappings")
+                    continue
 
                 has_postgres = any(port.get("privatePort") == 5432 for port in ports)
                 has_embedding = any(port.get("privatePort") == 8001 for port in ports)
@@ -139,8 +144,12 @@ def get_postgres_config(
             # Second pass: If no fully-configured pod, fall back to PostgreSQL-only pod
             if not target_pod:
                 for pod in pods_sorted:
-                    runtime = pod.get("runtime", {})
-                    ports = runtime.get("ports", [])
+                    runtime = pod.get("runtime", {}) or {}
+                    ports = runtime.get("ports", []) or []
+
+                    # Skip pods with no port mappings
+                    if not ports:
+                        continue
 
                     has_postgres = any(port.get("privatePort") == 5432 for port in ports)
 
@@ -304,8 +313,13 @@ def get_embedding_endpoint(
 
             # Prefer pods that have port 8001 exposed (indicates embedding service configured)
             for pod in pods_sorted:
-                runtime = pod.get("runtime", {})
-                ports = runtime.get("ports", [])
+                runtime = pod.get("runtime", {}) or {}
+                ports = runtime.get("ports", []) or []
+
+                # Skip pods with no port mappings (stopped/starting pods)
+                if not ports:
+                    log.debug(f"Skipping pod {pod.get('name')} - no port mappings")
+                    continue
 
                 has_embedding = any(port.get("privatePort") == 8001 for port in ports)
 
@@ -317,8 +331,12 @@ def get_embedding_endpoint(
             # Fallback: Use any pod with PostgreSQL (might not have embedding yet)
             if not target_pod:
                 for pod in pods_sorted:
-                    runtime = pod.get("runtime", {})
-                    ports = runtime.get("ports", [])
+                    runtime = pod.get("runtime", {}) or {}
+                    ports = runtime.get("ports", []) or []
+
+                    # Skip pods with no port mappings
+                    if not ports:
+                        continue
 
                     has_postgres = any(port.get("privatePort") == 5432 for port in ports)
 
