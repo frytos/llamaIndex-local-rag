@@ -143,7 +143,7 @@ class DatabaseConfig:
     """
 
     # Default connection parameters
-    DEFAULT_HOST: str = "localhost"
+    DEFAULT_HOST: str = ""  # Empty string triggers auto-detection from RunPod API
     DEFAULT_PORT: str = "5432"
     DEFAULT_DB_NAME: str = "vector_db"
 

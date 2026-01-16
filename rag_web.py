@@ -119,8 +119,8 @@ st.set_page_config(
 
 def init_session_state():
     """Initialize session state variables."""
-    # Auto-detect database connection if PGHOST is "auto"
-    pghost = os.environ.get("PGHOST", "localhost")
+    # Auto-detect database connection if PGHOST is not set or is "auto"
+    pghost = os.environ.get("PGHOST", "")
 
     if not pghost or pghost == "auto":
         try:
